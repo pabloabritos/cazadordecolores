@@ -611,9 +611,67 @@
     return { total, wrong, list: [...groups.values()].sort((x, y) => y.count - x.count) };
   }
 
-  function interpret(sum, conf, nam) {
+  const KIND_LABEL = {
+    protan: 'rojo‑verde, tipo "rojo" (protán)',
+    deutan: 'rojo‑verde, tipo "verde" (deután, el más común)',
+    tritan: 'azul‑amarillo (tritán, poco común)',
+  };
+  const sevFromScore = score => Math.min(1, Math.max(0.1, (9 - score) / 9));
+  const sevWord = s => s < 0.4 ? 'leve' : s < 0.75 ? 'moderada' : 'fuerte';
+
+  // Tipo probable combinando las tres misiones. Lo usan el informe y el simulador, así nunca se contradicen.
+  // Manda la Misión 1 (mide cada sensor por separado); las Misiones 2 y 3 desempatan, o suplen si falta la 1.
+  // Tipo de cada error de las Misiones 2 y 3: protán, deután, tritán u 'otro' (no típico de ningún daltonismo).
+  const errorKinds = s => s.answers.filter(a => !a.correct)
+    .map(a => s.mission === 2 ? Core.classifyConfusion(a.target, a.chosen) : Core.classifyNaming(a.si, a.chosen));
+  // Las opciones incorrectas son a propósito confusiones típicas, así que alguien que responde al azar
+  // parece daltónico. Lo que lo delata es la incoherencia: un daltónico se equivoca dentro de una sola
+  // familia (rojo‑verde o azul‑amarillo); al azar se mezclan familias y aparecen errores "otro".
+  function isRandomish(s) {
+    const k = errorKinds(s);
+    const rg = k.filter(isRG).length, tri = k.filter(x => x === 'tritan').length;
+    const inconsistent = k.length - Math.max(rg, tri);
+    return inconsistent >= 2 && inconsistent / k.length >= 0.25;
+  }
+
+  function likelyType(id) {
+    const sum = mission1Summary(id);
+    const votes = { protan: 0, deutan: 0, tritan: 0 };
+    const extra = [...sessionsOf(id, 2), ...sessionsOf(id, 3)];
+    const excluded = extra.filter(isRandomish);
+    for (const s of extra) if (!excluded.includes(s)) for (const k of errorKinds(s)) if (k in votes) votes[k]++;
+    const rgVotes = votes.protan + votes.deutan;
+    const out = { family: null, kind: null, s: null, guessedSubtype: false, basis: [], clearM1: false, excluded: excluded.length };
+    if (sum) {
+      const { L, M, S } = sum.avg, rg = Math.min(L, M);
+      const m1 = `figuras escondidas (sensor del rojo ${L.toFixed(1)}, del verde ${M.toFixed(1)} y del azul ${S.toFixed(1)}, de 10)`;
+      if (rg < 7 && S - rg >= 2) {
+        out.family = 'rg'; out.s = sevFromScore(rg); out.basis.push(m1);
+        if (M - L >= 2) out.kind = 'protan'; else if (L - M >= 2) out.kind = 'deutan';
+      } else if (S < 7 && rg - S >= 2) {
+        out.family = 'tritan'; out.kind = 'tritan'; out.s = sevFromScore(S); out.basis.push(m1);
+      } else if (L >= 7 && M >= 7 && S >= 7) {
+        out.clearM1 = true; // sin dificultades: no se adivina un tipo con las otras misiones
+        return out;
+      }
+    }
+    if (!out.family) {
+      if (rgVotes >= 3 && rgVotes >= 2 * votes.tritan) out.family = 'rg';
+      else if (votes.tritan >= 3 && votes.tritan >= 2 * rgVotes) { out.family = 'tritan'; out.kind = 'tritan'; }
+    }
+    const typical = out.family === 'tritan' ? votes.tritan : rgVotes;
+    if (out.family && typical) out.basis.push(`${typical} confusiones típicas en memoria y nombrar colores`);
+    if (out.family === 'rg' && !out.kind) {
+      if (votes.protan >= 3 && votes.protan >= 2 * votes.deutan) out.kind = 'protan';
+      else if (votes.deutan >= 3 && votes.deutan >= 2 * votes.protan) out.kind = 'deutan';
+      else { out.kind = 'deutan'; out.guessedSubtype = true; }
+    }
+    return out;
+  }
+
+  function interpret(sum, conf, nam, lt) {
     const lines = [];
-    let redGreen = false;
+    let redGreen = lt.family === 'rg';
     if (sum) {
       const { L, M, S } = sum.avg;
       const rg = Math.min(L, M);
@@ -622,12 +680,7 @@
       } else if (Math.max(L, M, S) < 5) {
         lines.push('Le costaron <b>todos</b> los tipos de color por igual. Puede ser cansancio, falta de atención o la pantalla. Conviene repetir otro día.');
       } else if (rg < 7 && S - rg >= 2) {
-        redGreen = true;
-        let sub = '';
-        if (M - L >= 2) sub = ' Parece más relacionado con el <b>sensor del rojo</b> (tipo "protán").';
-        else if (L - M >= 2) sub = ' Parece más relacionado con el <b>sensor del verde</b> (tipo "deután", el más común).';
-        else sub = ' Con este juego no se puede saber si es del tipo "rojo" o del tipo "verde"; eso lo define el oftalmólogo.';
-        lines.push('Le cuesta distinguir los colores que dependen de los sensores del <b>rojo y del verde</b>. Es la forma más común de daltonismo.' + sub);
+        lines.push('Le cuesta distinguir los colores que dependen de los sensores del <b>rojo y del verde</b>. Es la forma más común de daltonismo.');
       } else if (S < 7 && Math.min(L, M) - S >= 2) {
         lines.push('Le cuestan más las diferencias del <b>sensor del azul</b> (azul‑amarillo). Es un tipo poco común: <b>vale la pena comentarlo al oftalmólogo</b>.');
       } else {
@@ -652,6 +705,13 @@
         lines.push(`Al <b>nombrar colores</b> se equivocó en <b>${nam.wrong} de ${nam.total}</b>.`);
         if (rgNam / nam.wrong >= 0.6) { redGreen = true; lines.push('La mayoría de esos errores de nombre son <b>típicos del rojo‑verde</b> (por ejemplo, llamar "marrón" a un verde).'); }
       }
+    }
+    if (lt.excluded) {
+      lines.push(`⚠️ En ${lt.excluded === 1 ? 'una partida' : lt.excluded + ' partidas'} de memoria o nombrar colores hubo varios errores que no son típicos de ningún daltonismo (parecen respuestas al azar o distracción). ${lt.excluded === 1 ? 'No se tuvo' : 'No se tuvieron'} en cuenta para el tipo probable.`);
+    }
+    if (lt.family) {
+      const label = lt.guessedSubtype ? 'rojo‑verde (con estos juegos no se pudo distinguir si es del tipo "rojo" o del tipo "verde"; eso lo define el oftalmólogo)' : KIND_LABEL[lt.kind];
+      lines.push(`<b>Tipo probable:</b> ${label}${lt.s != null ? `, intensidad <b>${sevWord(lt.s)}</b>` : ''}.`);
     }
     if (!lines.length) lines.push('Todavía no hay partidas. Jueguen al menos una vez cada misión para armar el informe.');
     return { html: lines.map(l => `<p>${l}</p>`).join(''), redGreen };
@@ -681,7 +741,7 @@
     const ref = refId ? mission1Summary(refId) : null;
     const conf = confusionPairs(id);
     const nam = namingErrors(id);
-    const interp = interpret(sum, conf, nam);
+    const interp = interpret(sum, conf, nam, likelyType(id));
     const all = sessionsOf(id).slice().sort((a, b) => b.date.localeCompare(a.date));
     const devices = [...new Set(all.map(s => s.device))];
 
@@ -826,16 +886,19 @@
     protan: 'Rojo‑verde, tipo "rojo" (protán)',
     tritan: 'Azul‑amarillo (tritán, poco común)',
   };
-  // Punto de partida según los resultados de la Misión 1.
+  // Punto de partida: el tipo probable de sus resultados, explicado en una línea.
   function simDefaults(id) {
-    const sum = mission1Summary(id);
-    if (!sum) return { kind: 'deutan', s: 0.7, fromResults: false };
-    const { L, M, S } = sum.avg;
-    let kind = 'deutan', score = M;
-    if (S < Math.min(L, M) - 1) { kind = 'tritan'; score = S; }
-    else if (M - L >= 2) { kind = 'protan'; score = L; }
-    else score = Math.min(L, M);
-    return { kind, s: Math.min(1, Math.max(0.1, (9 - score) / 9)), fromResults: true };
+    const lt = likelyType(id), name = esc(player(id).name);
+    if (!lt.family) {
+      const note = lt.clearM1
+        ? `Con los resultados actuales de ${name} no se detectó un tipo de daltonismo: se muestra un caso típico como ejemplo. Se puede ajustar.`
+        : `Todavía no hay resultados suficientes de ${name}: se muestra un caso típico. Se puede ajustar.`;
+      return { kind: 'deutan', s: 0.7, note };
+    }
+    let note = `<b>Preseleccionado según los resultados de ${name}</b>: ${lt.basis.join(' y ')}.`;
+    if (lt.guessedSubtype) note += ' No se pudo distinguir entre el tipo "rojo" y el "verde": se muestra el "verde", que es el más común.';
+    if (lt.s == null) note += ' La intensidad es estimada: jugando la misión de figuras escondidas se afina.';
+    return { kind: lt.kind, s: lt.s ?? 0.7, note: note + ' Se puede ajustar.' };
   }
 
   function crayonsCanvas() {
@@ -875,7 +938,7 @@
         <label>Intensidad: <span id="sval"></span>
           <input type="range" id="sev" min="10" max="100" step="5" value="${Math.round(def.s * 100)}">
         </label>
-        <p class="muted" style="margin:0;font-size:.9rem">${def.fromResults ? `Arranca con lo que sugieren los resultados de ${esc(p.name)} en la misión de figuras escondidas. Se puede ajustar.` : 'Todavía no hay resultados de la misión de figuras escondidas: muestra un caso típico. Se puede ajustar.'}</p>
+        <p class="muted" style="margin:0;font-size:.9rem">${def.note}</p>
         <div class="row">
           <label class="row" style="display:flex"><button id="photoBtn" class="primary">📷 Usar una foto</button><input type="file" id="photo" accept="image/*" hidden></label>
           <button id="crayons">🖍️ Crayones de ejemplo</button>
