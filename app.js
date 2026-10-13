@@ -62,7 +62,28 @@
 
   // ---------- Dibujos ----------
   // Compañero (mascota): cada jugador elige piel, pelo, rayo y nombre. Se guarda en el jugador.
-  const DEFAULT_PET = { name: 'Chispa', skin: '#ffc93c', hair: '#2f6feb', bolt: '#ff8a00' };
+  const DEFAULT_PET = { name: 'Chispa', skin: '#ffc93c', hair: '#2f6feb', bolt: '#ff8a00', body: 'redondo', hairStyle: 'puntas', extra: 'nada' };
+  // Formas: cuerpo, peinado y extras (cada opción dibuja su parte del SVG).
+  const PET_SHAPES = {
+    body: {
+      redondo: (f, st) => `<circle cx="60" cy="68" r="40" fill="${f}" stroke="${st}" stroke-width="4"/>`,
+      cuadrado: (f, st) => `<rect x="20" y="28" width="80" height="80" rx="22" fill="${f}" stroke="${st}" stroke-width="4"/>`,
+      huevo: (f, st) => `<ellipse cx="60" cy="70" rx="36" ry="42" fill="${f}" stroke="${st}" stroke-width="4"/>`,
+    },
+    hairStyle: {
+      puntas: (f, st) => `<polygon points="22,58 14,22 40,38 48,6 62,32 80,4 84,36 108,20 98,58" fill="${f}" stroke="${st}" stroke-width="3" stroke-linejoin="round"/>`,
+      cresta: (f, st) => `<polygon points="44,46 46,12 54,30 60,0 66,30 74,12 76,46" fill="${f}" stroke="${st}" stroke-width="3" stroke-linejoin="round"/>`,
+      mechón: (f, st) => `<path d="M60 34 C46 8 82 2 76 20 C72 30 62 26 66 18" fill="none" stroke="${st}" stroke-width="10" stroke-linecap="round"/><path d="M60 34 C46 8 82 2 76 20 C72 30 62 26 66 18" fill="none" stroke="${f}" stroke-width="6" stroke-linecap="round"/>`,
+      pelado: () => '',
+    },
+    extra: {
+      nada: () => '',
+      orejas: (pet) => `<polygon points="24,50 26,10 54,32" fill="${pet.skin}" stroke="${darken(pet.skin)}" stroke-width="3" stroke-linejoin="round"/><polygon points="96,50 94,10 66,32" fill="${pet.skin}" stroke="${darken(pet.skin)}" stroke-width="3" stroke-linejoin="round"/><polygon points="30,40 31,20 46,32" fill="#ff8fb1"/><polygon points="90,40 89,20 74,32" fill="#ff8fb1"/>`,
+      antenas: (pet) => `<path d="M48 32 L36 8 M72 32 L84 8" stroke="#1b1b2a" stroke-width="3" stroke-linecap="round"/><circle cx="36" cy="8" r="6" fill="${pet.bolt}" stroke="${darken(pet.bolt, 0.6)}" stroke-width="2"/><circle cx="84" cy="8" r="6" fill="${pet.bolt}" stroke="${darken(pet.bolt, 0.6)}" stroke-width="2"/>`,
+      cuernitos: () => `<polygon points="36,40 30,10 52,32" fill="#f5efe0" stroke="#a8977a" stroke-width="3" stroke-linejoin="round"/><polygon points="84,40 90,10 68,32" fill="#f5efe0" stroke="#a8977a" stroke-width="3" stroke-linejoin="round"/>`,
+    },
+  };
+  const SHAPE_TITLES = { body: '🟢 Forma', hairStyle: '💇 Peinado', extra: '✨ Extras' };
   const PET_COLORS = {
     skin: [['amarillo', '#ffc93c'], ['naranja', '#ff9f43'], ['rosa', '#ff8fb1'], ['celeste', '#6ec6ff'], ['verde', '#7bd389'],
            ['violeta', '#b39ddb'], ['blanco', '#f5f5f5'], ['marrón', '#a47148'], ['rojo', '#f25f5c'], ['gris', '#b0b0b0']],
@@ -74,9 +95,12 @@
   const PET_NAMES = ['Chispa', 'Turbo', 'Rayito', 'Kiwi', 'Cometa', 'Bolita'];
   const darken = (hex, f = 0.7) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
   const curPet = () => ({ ...DEFAULT_PET, ...((player(db.currentPlayer) || {}).pet || {}) });
-  const petSvg = (pet = curPet()) => `<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">
-    <polygon points="22,58 14,22 40,38 48,6 62,32 80,4 84,36 108,20 98,58" fill="${pet.hair}" stroke="${darken(pet.hair)}" stroke-width="3" stroke-linejoin="round"/>
-    <circle cx="60" cy="68" r="40" fill="${pet.skin}" stroke="${darken(pet.skin)}" stroke-width="4"/>
+  const petSvg = (pet = curPet()) => {
+    const pick = (k, v) => PET_SHAPES[k][v] || PET_SHAPES[k][DEFAULT_PET[k]];
+    return `<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">
+    ${pick('extra', pet.extra)(pet)}
+    ${pick('hairStyle', pet.hairStyle)(pet.hair, darken(pet.hair))}
+    ${pick('body', pet.body)(pet.skin, darken(pet.skin))}
     <polygon points="58,34 50,50 58,50 54,62 68,44 60,44 64,34" fill="${pet.bolt}" stroke="${darken(pet.bolt, 0.6)}" stroke-width="1.5" stroke-linejoin="round"/>
     <ellipse cx="45" cy="66" rx="9" ry="11" fill="#fff"/><ellipse cx="75" cy="66" rx="9" ry="11" fill="#fff"/>
     <circle cx="47" cy="68" r="5.5" fill="#1b1b2a"/><circle cx="77" cy="68" r="5.5" fill="#1b1b2a"/>
@@ -84,6 +108,7 @@
     <circle cx="34" cy="83" r="6" fill="#ff6b6b" opacity=".85"/><circle cx="86" cy="83" r="6" fill="#ff6b6b" opacity=".85"/>
     <path d="M48 86 Q60 98 72 86" fill="none" stroke="#1b1b2a" stroke-width="4" stroke-linecap="round"/>
   </svg>`;
+  };
 
   function starPath(cx, cy, ro, ri) {
     let d = '';
@@ -267,9 +292,15 @@
       <div class="swatches">${PET_COLORS[key].map(([n, hex]) => `
         <button class="sw-btn ${draft[key] === hex ? 'sel' : ''}" data-k="${key}" data-c="${hex}"><span class="sw-dot" style="background:${hex}"></span>${n}</button>`).join('')}
       </div>`;
+    const shapeSection = key => `
+      <h2>${SHAPE_TITLES[key]}</h2>
+      <div class="shape-grid" data-grid="${key}"></div>`;
     $app.innerHTML = `
       <h1>${first ? `¡Ahora armá a tu compañero, ${esc(curName())}!` : '¡Armá a tu compañero!'}</h1>
       <div class="pet-preview">${petSvg(draft)}<span class="pet-name">${esc(draft.name)}</span></div>
+      ${shapeSection('body')}
+      ${shapeSection('hairStyle')}
+      ${shapeSection('extra')}
       ${section('skin', '🎨 Piel')}
       ${section('hair', '💇 Pelo')}
       ${section('bolt', '⚡ Rayo')}
@@ -280,7 +311,15 @@
       ${first ? '' : '<button class="link" id="back">Volver</button>'}
     `;
     const preview = $app.querySelector('.pet-preview'), nameInput = $app.querySelector('#petName');
-    const refresh = () => { preview.innerHTML = `${petSvg(draft)}<span class="pet-name">${esc(draft.name || '¿?')}</span>`; };
+    // Las miniaturas muestran cada forma con los colores elegidos, así que se redibujan en cada cambio.
+    const renderShapes = () => $app.querySelectorAll('[data-grid]').forEach(g => {
+      const key = g.dataset.grid;
+      g.innerHTML = Object.keys(PET_SHAPES[key]).map(v => `
+        <button class="shape-btn ${draft[key] === v ? 'sel' : ''}" data-k="${key}" data-v="${v}">${petSvg({ ...draft, [key]: v })}<span>${v}</span></button>`).join('');
+      g.querySelectorAll('.shape-btn').forEach(b => b.onclick = () => { draft[key] = b.dataset.v; Sfx.tap(); refresh(); });
+    });
+    const refresh = () => { preview.innerHTML = `${petSvg(draft)}<span class="pet-name">${esc(draft.name || '¿?')}</span>`; renderShapes(); };
+    renderShapes();
     $app.querySelectorAll('.sw-btn').forEach(b => b.onclick = () => {
       draft[b.dataset.k] = b.dataset.c;
       $app.querySelectorAll(`.sw-btn[data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle('sel', x === b));
