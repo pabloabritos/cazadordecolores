@@ -62,6 +62,14 @@
 
   .cheer { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
     font-size: 5rem; animation: pop .55s ease-out forwards; }
+  .encourage { font-weight: 800; color: var(--accent); }
+  .progress { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }
+  .plabel { font-weight: 700; font-size: .95rem; white-space: nowrap; }
+  .ptrack { position: relative; flex: 1; height: 14px; background: #d7d7de; border-radius: 7px; }
+  .pfill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); border-radius: 7px; transition: width .4s; }
+  .prunner { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 1.4rem; transition: left .4s; }
+  .pgoal { font-size: 1.3rem; }
+  button small { font-size: .85rem; font-weight: 500; opacity: .9; }
   @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
   /* Informe */
@@ -368,12 +376,38 @@ if (typeof module !== 'undefined') module.exports = Core;
 
   // ---------- Recompensas ----------
   const CHEERS = ['⭐', '🌟', '✨', '💫'];
+  const PHRASES = ['¡Vas muy bien, {n}!', '¡Seguí así!', '¡Sos un crack, {n}!', '¡Qué concentración!', '¡Dale que podés!'];
+  let answersSincePhrase = 0;
   function cheer() {
     const el = document.createElement('div');
     el.className = 'cheer';
     el.textContent = CHEERS[Math.floor(Math.random() * CHEERS.length)];
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 600);
+  }
+  // Cada 6 respuestas, una frase de ánimo en la línea de la consigna (no tapa la lámina).
+  function encouragement() {
+    if (++answersSincePhrase < 6) return '';
+    answersSincePhrase = 0;
+    const text = PHRASES[Math.floor(Math.random() * PHRASES.length)].replace('{n}', esc(curName()));
+    return `<span class="encourage">${text}</span><br>`;
+  }
+
+  // Barra de avance: una estrella que camina hacia la meta. No dice si acertó o no.
+  const progressBar = (label, frac) => {
+    const pct = Math.round(Math.min(1, Math.max(0, frac)) * 100);
+    return `<div class="progress"><span class="plabel">${label}</span>
+      <div class="ptrack"><div class="pfill" style="width:${pct}%"></div><span class="prunner" style="left:${pct}%">⭐</span></div>
+      <span class="pgoal">🏁</span></div>`;
+  };
+
+  // ---------- Partidas sin terminar (se retoman donde quedaron) ----------
+  const progressKey = m => db.currentPlayer + ':' + m;
+  const getProgress = m => (db.progress || {})[progressKey(m)];
+  function setProgress(m, st) {
+    db.progress = db.progress || {};
+    if (st) db.progress[progressKey(m)] = st; else delete db.progress[progressKey(m)];
+    save();
   }
 
   // ---------- Pantalla de inicio ----------
@@ -405,6 +439,7 @@ if (typeof module !== 'undefined') module.exports = Core;
     if (!db.players.length) return newPlayer(true);
     const cur = player(db.currentPlayer) || db.players[0];
     db.currentPlayer = cur.id;
+    const p1 = getProgress(1), p2 = getProgress(2);
     $app.innerHTML = `
       <h1>¡Hola, ${esc(cur.name)}! 👋</h1>
       <p class="muted">¿Quién juega?</p>
@@ -413,14 +448,18 @@ if (typeof module !== 'undefined') module.exports = Core;
         <button class="chip" id="add">+ Agregar</button>
       </div>
       <p class="muted" style="font-size:.9rem">Tip: que también juegue un adulto con visión típica, en este mismo aparato. Así el informe tiene con qué comparar.</p>
-      <button class="big primary" id="m1">🔍 Misión 1: ¿Dónde está escondido?</button>
-      <button class="big primary" id="m2">🎨 Misión 2: ¿Cuál era el color?</button>
+      <button class="big primary" id="m1">🔍 Misión 1: ¿Dónde está escondido?${p1 ? `<br><small>Seguir en el Nivel ${p1.part} ▶</small>` : ''}</button>
+      ${p1 ? '<button class="link" id="m1new">Empezar la Misión 1 de nuevo</button>' : ''}
+      <button class="big primary" id="m2">🎨 Misión 2: ¿Cuál era el color?${p2 ? '<br><small>Seguir donde quedaste ▶</small>' : ''}</button>
+      ${p2 ? '<button class="link" id="m2new">Empezar la Misión 2 de nuevo</button>' : ''}
       <button class="big" id="rep">📋 Para papás: informe e historial</button>
     `;
     $app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { db.currentPlayer = b.dataset.p; save(); home(); });
     $app.querySelector('#add').onclick = () => newPlayer(false);
     $app.querySelector('#m1').onclick = () => checklist(mission1);
     $app.querySelector('#m2').onclick = () => checklist(mission2);
+    if (p1) $app.querySelector('#m1new').onclick = () => { setProgress(1, null); checklist(mission1); };
+    if (p2) $app.querySelector('#m2new').onclick = () => { setProgress(2, null); checklist(mission2); };
     $app.querySelector('#rep').onclick = () => report(db.currentPlayer);
   }
 
@@ -436,6 +475,7 @@ if (typeof module !== 'undefined') module.exports = Core;
           <li>Una habitación con luz normal, sin sol directo sobre la pantalla.</li>
           <li>Sin anteojos de colores ni filtros de color.</li>
           <li>Que juegue <b>sin ayuda</b>. Si no ve nada, que toque "No veo nada": también suma estrellas.</li>
+          <li>Si se cansa, puede tocar <b>"Salir"</b>: la próxima vez sigue desde donde quedó.</li>
         </ul>
       </div>
       <button class="big primary" id="go">¡Listo, a jugar!</button>
@@ -462,31 +502,43 @@ if (typeof module !== 'undefined') module.exports = Core;
     }
   }
 
+  // Avance de 0 a 1: cuánto le falta a cada sensor para terminar.
+  const m1Progress = stairs =>
+    Core.AXES.reduce((a, ax) => a + (stairs[ax].done ? 1 : (stairs[ax].level - 1) / Core.LEVELS), 0) / Core.AXES.length;
+  const EASY_EVERY = 5;     // cada tantas láminas, una fácil para descansar
+  const PART_SPLIT = 0.5;   // a mitad de camino termina el Nivel 1
+
   function mission1() {
-    const stairs = Core.newStairs();
-    const log = [];
-    let stars = 0, n = 0, controls = 0, lastShape = null;
-    const tutorial = [{ kind: 'control', shape: 'estrella' }, { kind: 'control', shape: 'anillo' }];
-    let tutoIdx = 0;
+    // st se guarda después de cada respuesta, así se puede seguir más tarde
+    let st = getProgress(1);
+    if (st) st.easyNext = true; // al volver, arranca con una fácil
+    else st = { stairs: Core.newStairs(), log: [], stars: 0, sinceEasy: 0, lastShape: null, part: 1, part2From: PART_SPLIT, tutorial: 2, easyNext: false };
+    const persist = () => setProgress(1, st);
 
     function nextTrial() {
-      const shape = shuffle(Core.SHAPE_NAMES.filter(s => s !== lastShape))[0];
-      lastShape = shape;
+      const shape = shuffle(Core.SHAPE_NAMES.filter(s => s !== st.lastShape))[0];
+      st.lastShape = shape;
       const seed = Math.floor(Math.random() * 2 ** 31);
-      if (tutoIdx < tutorial.length) return { ...tutorial[tutoIdx++], seed, tutorial: true };
-      const open = Core.AXES.filter(a => !stairs[a].done);
+      if (st.tutorial > 0) return { kind: 'control', shape, seed, tutorial: true };
+      const open = Core.AXES.filter(a => !st.stairs[a].done);
       if (!open.length) return null;
-      n++;
-      if (n % 7 === 4 && controls < 4) { controls++; return { kind: 'control', shape, seed }; }
+      // Láminas fáciles (las ve cualquiera): después de un error y cada EASY_EVERY láminas.
+      if (st.easyNext || ++st.sinceEasy >= EASY_EVERY) { st.easyNext = false; st.sinceEasy = 0; return { kind: 'control', shape, seed }; }
       const axis = open[Math.floor(Math.random() * open.length)];
-      return { kind: 'axis', axis, level: stairs[axis].level, shape, seed };
+      return { kind: 'axis', axis, level: st.stairs[axis].level, shape, seed };
+    }
+
+    function partFrac() {
+      const p = m1Progress(st.stairs);
+      return st.part === 1 ? p / PART_SPLIT : (p - st.part2From) / (1 - st.part2From);
     }
 
     function show(trial) {
       if (!trial) return finish();
       $app.innerHTML = `
-        <div class="topbar no-print"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${stars}</span></div>
-        <p class="hint">${trial.tutorial ? `${esc(curName())}, entre los puntitos se esconde una figura. ¿Cuál es?` : '¿Qué figura está escondida?'}</p>
+        <div class="topbar no-print"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${st.stars}</span></div>
+        ${progressBar('Nivel ' + st.part, trial.tutorial ? 0 : partFrac())}
+        <p class="hint">${trial.tutorial ? `${esc(curName())}, entre los puntitos se esconde una figura. ¿Cuál es?` : encouragement() + '¿Qué figura está escondida?'}</p>
         <div class="plate-wrap"><canvas class="plate"></canvas></div>
         <div class="answers">
           ${Core.SHAPE_NAMES.map(s => `<button data-a="${s}">${ICONS[s]}<span>${SHAPE_LABEL[s]}</span></button>`).join('')}
@@ -496,26 +548,53 @@ if (typeof module !== 'undefined') module.exports = Core;
       drawPlate($app.querySelector('canvas'), trial);
       $app.querySelector('#quit').onclick = home;
       $app.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+        $app.querySelectorAll('[data-a]').forEach(x => x.onclick = null); // evita doble toque
         const correct = b.dataset.a === trial.shape;
-        stars++; cheer();
-        if (!trial.tutorial) {
-          log.push({ kind: trial.kind, axis: trial.axis || null, level: trial.level || null, shape: trial.shape, answer: b.dataset.a, correct });
-          if (trial.kind === 'axis') Core.stairUpdate(stairs[trial.axis], correct);
+        st.stars++; cheer();
+        if (trial.tutorial) st.tutorial--;
+        else {
+          st.log.push({ kind: trial.kind, axis: trial.axis || null, level: trial.level || null, shape: trial.shape, answer: b.dataset.a, correct });
+          if (trial.kind === 'axis') {
+            Core.stairUpdate(st.stairs[trial.axis], correct);
+            if (!correct) st.easyNext = true;
+          }
         }
+        const p = m1Progress(st.stairs);
+        if (st.part === 1 && p >= PART_SPLIT && p < 1) {
+          st.part = 2; st.part2From = p; st.easyNext = true;
+          persist();
+          return setTimeout(intermission, 450);
+        }
+        persist();
         setTimeout(() => show(nextTrial()), 350);
       });
     }
 
+    function intermission() {
+      $app.innerHTML = `
+        <div style="text-align:center;padding-top:6vh">
+          <div style="font-size:4.5rem">🏅</div>
+          <h1>¡Completaste el Nivel 1!</h1>
+          <p style="font-size:1.25rem">Ya juntaste <b>${st.stars}</b> estrellas ⭐</p>
+          <p style="font-size:1.3rem">Ahora viene el <b>Nivel 2</b>…<br>¡Solo un verdadero campeón completa la misión!<br><b>¡Intentalo, ${esc(curName())}!</b> 💪</p>
+          <button class="big primary" id="go">¡Vamos al Nivel 2!</button>
+          <button class="link" id="later">Seguir más tarde</button>
+        </div>
+      `;
+      $app.querySelector('#go').onclick = () => show(nextTrial());
+      $app.querySelector('#later').onclick = home;
+    }
+
     function finish() {
       const scores = {};
-      for (const a of Core.AXES) scores[a] = stairs[a].score;
-      const ctrl = log.filter(t => t.kind === 'control');
+      for (const a of Core.AXES) scores[a] = st.stairs[a].score;
+      const ctrl = st.log.filter(t => t.kind === 'control');
       db.sessions.push({
         id: uid(), playerId: db.currentPlayer, mission: 1, date: new Date().toISOString(), device: deviceLabel(),
-        scores, controls: { ok: ctrl.filter(t => t.correct).length, total: ctrl.length }, trials: log,
+        scores, controls: { ok: ctrl.filter(t => t.correct).length, total: ctrl.length }, trials: st.log,
       });
-      save();
-      celebrate(stars);
+      setProgress(1, null);
+      celebrate(st.stars);
     }
 
     show(nextTrial());
@@ -524,18 +603,20 @@ if (typeof module !== 'undefined') module.exports = Core;
   // ---------- Misión 2 ----------
   function mission2() {
     const ROUNDS = 14;
-    const candidates = Core.PALETTE.map((_, i) => i).filter(Core.isGoodTarget);
-    const targets = shuffle(candidates).slice(0, ROUNDS);
-    const answers = [];
-    let stars = 0, k = 0;
+    let st = getProgress(2);
+    if (!st) {
+      const candidates = Core.PALETTE.map((_, i) => i).filter(Core.isGoodTarget);
+      st = { targets: shuffle(candidates).slice(0, ROUNDS), answers: [], stars: 0, k: 0 };
+    }
 
     function show() {
-      if (k >= targets.length) return finish();
-      const ti = targets[k];
+      if (st.k >= st.targets.length) return finish();
+      const ti = st.targets[st.k];
       const opts = shuffle([ti, ...Core.confusersFor(ti)]);
       $app.innerHTML = `
-        <div class="topbar"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${stars}</span></div>
-        <p class="hint">Mirá bien este color… ¡después se esconde!</p>
+        <div class="topbar"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${st.stars}</span></div>
+        ${progressBar('Colores', st.k / st.targets.length)}
+        <p class="hint">${encouragement()}Mirá bien este color… ¡después se esconde!</p>
         <div class="target" style="background:${Core.PALETTE[ti].hex}"></div>
         <div class="opts" style="visibility:hidden">
           ${opts.map(i => `<button data-i="${i}" style="background:${Core.PALETTE[i].hex}" aria-label="opción"></button>`).join('')}
@@ -546,22 +627,24 @@ if (typeof module !== 'undefined') module.exports = Core;
         const t = $app.querySelector('.target');
         if (!t) return;
         t.classList.add('hidden'); t.textContent = '?';
-        $app.querySelector('.hint').textContent = '¿Cuál era el color?';
+        $app.querySelector('.hint').lastChild.textContent = '¿Cuál era el color?';
         const o = $app.querySelector('.opts');
         o.style.visibility = 'visible';
         o.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+          o.querySelectorAll('[data-i]').forEach(x => x.onclick = null);
           const ci = +b.dataset.i;
-          answers.push({ target: ti, chosen: ci, correct: ci === ti });
-          stars++; cheer(); k++;
+          st.answers.push({ target: ti, chosen: ci, correct: ci === ti });
+          st.stars++; st.k++; cheer();
+          setProgress(2, st);
           setTimeout(show, 350);
         });
       }, 2200);
     }
 
     function finish() {
-      db.sessions.push({ id: uid(), playerId: db.currentPlayer, mission: 2, date: new Date().toISOString(), device: deviceLabel(), answers });
-      save();
-      celebrate(stars);
+      db.sessions.push({ id: uid(), playerId: db.currentPlayer, mission: 2, date: new Date().toISOString(), device: deviceLabel(), answers: st.answers });
+      setProgress(2, null);
+      celebrate(st.stars);
     }
 
     show();
@@ -572,7 +655,7 @@ if (typeof module !== 'undefined') module.exports = Core;
       <div style="text-align:center;padding-top:10vh">
         <div style="font-size:5rem">🏆</div>
         <h1>¡Misión cumplida, ${esc(curName())}!</h1>
-        <p style="font-size:1.4rem">Juntaste <b>${stars}</b> estrellas ⭐</p>
+        <p style="font-size:1.4rem">Juntaste <b>${stars}</b> estrellas ⭐<br>¡Sos un verdadero campeón!</p>
         <button class="big primary" id="home">Volver al inicio</button>
       </div>
     `;
