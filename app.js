@@ -246,17 +246,20 @@
   function newPlayer(first) {
     setTheme('menu');
     $app.innerHTML = `
+      ${first ? '<div class="menu-top" style="justify-content:flex-end"><button class="pill-btn" id="guide">👨‍👩‍👦 Papá y mamá</button></div>' : ''}
       <div class="hero">${petSvg(DEFAULT_PET)}<div class="bubble"><span class="fun">${first ? '¡Hola! Soy tu compañero ⚡' : 'Nuevo jugador'}</span>${first ? 'Vamos a cazar colores juntos.' : ''}</div></div>
       <h1>${first ? '¿Cómo te llamás?' : 'Nombre del jugador'}</h1>
       <input type="text" id="name" maxlength="30" autocomplete="off" placeholder="${first ? 'Tu nombre' : 'Por ejemplo: Mamá'}">
       <p style="font-size:.9rem;opacity:.9">El nombre y los resultados quedan guardados solo en este aparato.</p>
-      ${first ? '' : `<p class="bubble" style="font-weight:500">${refNote()}</p>`}
+      ${first ? '' : `<p class="note">${refNote()}</p>`}
       <button class="big primary" id="ok" style="background:#1b1b3a;border-color:#ffc83d">¡Listo!</button>
       ${first ? `<button class="link" id="restore">¿Ya jugaba en otro aparato? Cargar una copia</button>
         <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
-        <p id="restoreMsg" style="font-weight:700"></p>` : '<button class="link" id="back">Volver</button>'}
+        <p id="restoreMsg" style="font-weight:700"></p>
+        <p class="note" style="margin-top:18px">👨‍👩‍👦 <b>Papá o mamá:</b> antes de que empiece a jugar, lean la guía del botón de arriba. Este primer nombre tiene que ser el <b>del chico que va a jugar</b>; los demás (hermanos, papá, mamá) se agregan después en "Papá y mamá".</p>` : '<button class="link" id="back">Volver</button>'}
     `;
     if (first) {
+      $app.querySelector('#guide').onclick = () => parentsGuide(() => newPlayer(true));
       const f = $app.querySelector('#restoreFile');
       $app.querySelector('#restore').onclick = () => f.click();
       f.onchange = async () => {
@@ -354,7 +357,7 @@
     $app.innerHTML = `
       <div class="menu-top">
         <button class="pill-btn" id="sound">${db.sound === false ? '🔇' : '🔊'}</button>
-        <button class="pill-btn" id="parents">👨‍👩‍👦 Papás</button>
+        <button class="pill-btn" id="parents">👨‍👩‍👦 Papá y mamá</button>
       </div>
       <div class="hero"><button class="pet-btn" id="pet" aria-label="Cambiar compañero">${petSvg(pet)}<span class="pet-name">${esc(pet.name)} ✏️</span></button><div class="bubble"><span class="fun">¡Hola, ${esc(cur.name)}!</span>${BUBBLES[Math.floor(Math.random() * BUBBLES.length)].replace('{pet}', esc(pet.name))}</div></div>
       <div class="power"><span>PODER</span><b>⚡ ${fmtNum(powerOf(cur.id))}</b></div>
@@ -375,7 +378,7 @@
 
   // La guía para el adulto se muestra una vez cada vez que se abre la app.
   // El primer jugador es el chico; los demás son adultos que juegan para comparar.
-  const kidName = () => esc((db.players[0] || {}).name || 'el chico');
+  const kidName = () => esc((db.players[0] || {}).name || 'el nene');
   const isReference = () => db.players.length > 1 && db.currentPlayer !== db.players[0].id;
   const refNote = () => `<b>Importante: jueguen sin que ${kidName()} los vea.</b> Si los ve encontrar al instante figuras o diferencias que él no ve, puede frustrarse o sentir que "le va mal". Lo ideal es jugar cuando no está o está ocupado en otra cosa.`;
 
@@ -389,7 +392,7 @@
       $app.innerHTML = `
         <h1>👀 Antes de jugar como ${esc(curName())}</h1>
         <div class="card">
-          <p style="margin-top:0">Estás jugando como <b>${esc(curName())}</b>, para que el informe tenga una referencia de visión típica.</p>
+          <p style="margin-top:0">Estás jugando como <b>${esc(curName())}</b>. Sus resultados sirven para comparar con los de ${kidName()}.</p>
           <p>${refNote()}</p>
           <p class="muted">Usen el mismo aparato y las mismas condiciones que cuando juega ${kidName()} (brillo alto, Night Shift y True Tone apagados).</p>
         </div>
@@ -414,7 +417,8 @@
           <li>Una habitación con luz normal, sin sol directo sobre la pantalla.</li>
           <li>Sin anteojos de colores ni filtros de color.</li>
           <li>Que juegue <b>sin ayuda</b>. Si no ve nada, que toque "No veo nada": también suma estrellas.</li>
-          <li>Si se cansa, puede tocar <b>✕</b>: la próxima vez sigue desde donde quedó.</li>
+          <li><b>No le digan si acertó o no</b>: no es un juego de ganar o perder.</li>
+          <li>Si se cansa, puede tocar <b>"← Volver"</b>: la próxima vez sigue desde donde quedó.</li>
         </ul>
       </div>
       <button class="big primary" id="go">¡Listo, a jugar!</button>
@@ -747,7 +751,8 @@
     const cur = player(db.currentPlayer);
     $app.innerHTML = `
       <div class="topbar"><button class="link" id="back">← Volver al juego</button></div>
-      <h1>👨‍👩‍👦 Zona de papás</h1>
+      <h1>👨‍👩‍👦 Papá y mamá</h1>
+      <button class="big" id="guide">📖 Guía antes de empezar</button>
       <div class="card">
         <p class="muted" style="margin-top:0">¿Quién juega?</p>
         <div class="row">
@@ -767,6 +772,67 @@
     $app.querySelector('#rep').onclick = () => report(db.currentPlayer);
     $app.querySelector('#sim').onclick = () => simulator(db.currentPlayer);
     $app.querySelector('#dev').onclick = devices;
+    $app.querySelector('#guide').onclick = () => parentsGuide(parents);
+  }
+
+  // ---------- Guía para papá y mamá (antes del primer contacto) ----------
+  function parentsGuide(back) {
+    setTheme('parents');
+    const kid = kidName();
+    $app.innerHTML = `
+      <div class="topbar"><button class="link" id="back">← Volver</button></div>
+      <h1>📖 Antes de empezar</h1>
+      <p class="muted">Una guía corta para papá y mamá. Vale la pena leerla antes de que ${kid} juegue por primera vez.</p>
+      <div class="card">
+        <h2 style="margin-top:0">🎯 Qué es este juego</h2>
+        <p>Es un juego que <b>junta información</b> sobre cómo ve los colores ${kid}: qué colores confunde y cuánto. <b>No es un examen ni una competencia</b>, y tampoco reemplaza al oftalmólogo: orienta y ayuda a explicarlo en casa y en la escuela.</p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">🤐 Mientras juega</h2>
+        <ul>
+          <li><b>No le digan si está bien o mal</b>: ni festejos ni correcciones ("¡no, era el verde!"). El juego tampoco se lo dice: todas las respuestas suman estrellas. Lo que importa son sus respuestas reales.</li>
+          <li><b>No lo ayuden ni le sugieran.</b> Si no ve nada, que toque <b>"No veo nada"</b> o <b>"Son todas iguales"</b>: también es una respuesta valiosa, mejor que adivinar.</li>
+          <li>Si pregunta por qué no ve algo, con naturalidad: <i>"tus ojos ven los colores un poco distinto, y este juego nos ayuda a entender cómo"</i>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">📅 Cuándo y cuánto</h2>
+        <ul>
+          <li><b>Una o dos misiones por día</b>, no todas juntas. Cansado responde peor.</li>
+          <li>Orden sugerido: el primer día la <b>Misión 1</b> y la <b>Misión 4</b> (las que más información dan); otro día la <b>2</b> y la <b>3</b>.</li>
+          <li>Que esté <b>descansado</b>, sin hambre ni sueño, y sin la tele o hermanos alrededor.</li>
+          <li>Si se cansa o se distrae, toquen <b>"← Volver"</b>: la misión queda guardada y sigue otro día.</li>
+          <li>Vale la pena repetir cada misión <b>2 o 3 veces en días distintos</b>: si los resultados se parecen, son más confiables.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">📱 La pantalla</h2>
+        <ul>
+          <li><b>Siempre el mismo aparato.</b> En el iPhone, agréguenlo a la pantalla de inicio (Safari → Compartir → "Agregar a pantalla de inicio") y ábranlo <b>siempre desde el ícono</b>: ahí quedan guardados los datos.</li>
+          <li><b>Brillo alto</b>, y <b>Night Shift y True Tone apagados</b> (Ajustes → Pantalla y brillo).</li>
+          <li>Sin filtros de color ni anteojos de colores. Luz normal, sin sol directo sobre la pantalla.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">👥 Quién juega</h2>
+        <ul>
+          <li>El <b>primer jugador</b> que se anota tiene que ser ${kid}: la app lo toma como el jugador principal.</li>
+          <li>Si quieren jugar ustedes o los hermanos, agreguen un jugador en <b>"Papá y mamá"</b>. Sus resultados sirven para comparar con los de ${kid}.</li>
+          <li>Los demás <b>juegan sin que ${kid} los vea</b>: si los ve encontrar al instante cosas que él no ve, puede frustrarse o sentir que "le va mal".</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">📋 Los resultados</h2>
+        <ul>
+          <li>Están en <b>"Papá y mamá" → Informe</b>, escrito para que lo entienda cualquiera. Se puede guardar como PDF para la maestra, la psicopedagoga o el oftalmólogo.</li>
+          <li>Para pasar los datos a otro aparato, o mandarlos, usen <b>"Papá y mamá" → Cambiar de aparato → Enviar copia</b>.</li>
+          <li>Todo queda guardado <b>solo en este aparato</b>: no se manda a ningún lado salvo que ustedes envíen la copia.</li>
+        </ul>
+      </div>
+      <button class="big primary" id="ok">Entendido</button>
+    `;
+    $app.querySelector('#back').onclick = back;
+    $app.querySelector('#ok').onclick = back;
   }
 
   // ---------- Copia de seguridad y cambio de aparato ----------
