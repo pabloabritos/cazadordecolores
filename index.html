@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cazador de colores</title>
+<meta name="theme-color" content="#2d3a8c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Colores">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  :root {
+    --bg: #ececef;
+    --card: #ffffff;
+    --ink: #1d1d22;
+    --muted: #5d5d68;
+    --line: #d4d4da;
+    --accent: #2d3a8c;
+    --accent-ink: #ffffff;
+    --gold: #e6a700;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(48px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 1.6rem; margin: .4em 0 .3em; }
+  h2 { font-size: 1.2rem; margin: 1.6em 0 .5em; }
+  p { margin: .5em 0; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 12px 0; }
+  button { font: inherit; cursor: pointer; border-radius: 14px; border: 2px solid var(--line);
+    background: var(--card); color: var(--ink); padding: 12px 18px; touch-action: manipulation; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.big { width: 100%; font-size: 1.25rem; padding: 18px; margin: 8px 0; }
+  button.link { border: none; background: none; color: var(--accent); padding: 8px 4px; text-decoration: underline; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { border-radius: 999px; padding: 8px 16px; }
+  .chip.sel { border-color: var(--accent); background: #e3e6f7; font-weight: 600; }
+  input[type=text] { font: inherit; font-size: 1.3rem; width: 100%; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--line); margin: 8px 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .stars { font-weight: 700; color: #8a6400; white-space: nowrap; }
+  .hint { text-align: center; font-size: 1.15rem; margin: 6px 0 10px; }
+
+  /* Juego 1 */
+  .plate-wrap { display: flex; justify-content: center; }
+  canvas.plate { width: min(88vw, 50vh, 440px); height: min(88vw, 50vh, 440px); border-radius: 50%; background: #3a3a3f; }
+  .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+  .answers button { padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: .95rem; }
+  .answers svg { width: 52px; height: 52px; }
+  .answers .none { grid-column: 1 / -1; }
+
+  /* Juego 2 */
+  .target { width: min(60vw, 240px); height: min(60vw, 240px); border-radius: 50%; margin: 10px auto;
+    border: 6px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+  .target.hidden { background: #d9d9de !important; display: flex; align-items: center; justify-content: center; font-size: 4rem; color: #8b8b95; }
+  .opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; max-width: 420px; margin: 12px auto; }
+  .opts button { aspect-ratio: 1; border-radius: 50%; border: 6px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 0; }
+
+  .cheer { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
+    font-size: 5rem; animation: pop .55s ease-out forwards; }
+  @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+
+  /* Informe */
+  .notice { background: #fff6dc; border: 1px solid #ecd28a; border-radius: 12px; padding: 12px 14px; }
+  .bar-row { margin: 14px 0; }
+  .bar-label { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .bar { height: 18px; background: #e4e4ea; border-radius: 9px; position: relative; overflow: hidden; margin-top: 4px; }
+  .bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 9px; }
+  .bar.ref > span { background: #9aa0b8; }
+  .bar-text { font-size: .92rem; color: var(--muted); }
+  .pair { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .sw { width: 44px; height: 44px; border-radius: 10px; border: 1px solid rgba(0,0,0,.15); flex: none; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  ul { padding-left: 1.2em; }
+  li { margin: .3em 0; }
+  .tech { font-size: .85rem; color: var(--muted); }
+
+  @media print {
+    body, html { background: #fff; }
+    .no-print { display: none !important; }
+    .card { border: none; padding: 0; }
+    h2 { break-after: avoid; }
+    .pair, .bar-row, tr { break-inside: avoid; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<!-- Núcleo: matemática de color y lógica de los juegos (sin DOM, se puede testear con Node) -->
+<script id="core">
+const Core = (() => {
+  // ---------- Conversión de color ----------
+  const toLin = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const toSrgb = c => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const hexToLin = hex => [1, 3, 5].map(i => toLin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const linToCss = rgb => 'rgb(' + rgb.map(v => Math.round(255 * toSrgb(clamp01(v)))).join(',') + ')';
+  const mul = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+  function inv3(m) {
+    const [a, b, c] = m[0], [d, e, f] = m[1], [g, h, i] = m[2];
+    const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+    const det = a * A + b * B + c * C;
+    return [
+      [A / det, -(b * i - c * h) / det, (b * f - c * e) / det],
+      [B / det, (a * i - c * g) / det, -(a * f - c * d) / det],
+      [C / det, -(a * h - b * g) / det, (a * e - b * d) / det],
+    ];
+  }
+
+  // RGB lineal -> conos LMS (Viénot, Brettel & Mollon 1999)
+  const RGB2LMS = [[17.8824, 43.5161, 4.11935], [3.45565, 27.1554, 3.86714], [0.0299566, 0.184309, 1.46709]];
+  const LMS2RGB = inv3(RGB2LMS);
+  const AXES = ['L', 'M', 'S'];
+
+  // Modula un solo tipo de cono: los colores resultantes caen sobre la línea de confusión
+  // protán (L), deután (M) o tritán (S) del color base.
+  function shiftCone(lin, axis, c) {
+    const lms = mul(RGB2LMS, lin);
+    lms[AXES.indexOf(axis)] *= 1 + c;
+    return mul(LMS2RGB, lms);
+  }
+
+  // ---------- Juego 1: láminas ----------
+  const BASES = [[0.30, 0.30, 0.30], [0.34, 0.30, 0.24], [0.26, 0.30, 0.34]];
+  const NOISE = [0.72, 1.12];           // ruido de luminancia por puntito (tapa pistas de brillo)
+  const CONTROL_FACTOR = 0.55;          // láminas de control: figura más oscura, la ve cualquiera
+  const LEVELS = 10;
+  const MIN_C = { L: 0.006, M: 0.008, S: 0.05 };
+  const inGamut = v => v.every(x => x >= 0 && x <= 1);
+
+  function maxContrast(axis) {
+    let lo = 0, hi = 2;
+    for (let k = 0; k < 40; k++) {
+      const mid = (lo + hi) / 2;
+      const ok = BASES.every(b => [1, -1].every(s => {
+        const v = shiftCone(b, axis, s * mid);
+        return NOISE.every(n => inGamut(v.map(x => x * n)));
+      }));
+      if (ok) lo = mid; else hi = mid;
+    }
+    return lo * 0.95;
+  }
+  const MAX_C = { L: maxContrast('L'), M: maxContrast('M'), S: maxContrast('S') };
+
+  // Nivel 1 = diferencia más grande que permite la pantalla; nivel 10 = diferencia muy fina.
+  const contrastFor = (axis, level) =>
+    MAX_C[axis] * Math.pow(MIN_C[axis] / MAX_C[axis], (level - 1) / (LEVELS - 1));
+
+  // Figuras en coordenadas 0..1 (la lámina es un círculo de radio 0,5 centrado en 0,5)
+  function starPoints(cx, cy, ro, ri) {
+    const pts = [];
+    for (let k = 0; k < 10; k++) {
+      const r = k % 2 ? ri : ro, a = -Math.PI / 2 + k * Math.PI / 5;
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+    return pts;
+  }
+  const STAR = starPoints(0.5, 0.53, 0.34, 0.15);
+  const BOLT = [[0.57, 0.15], [0.29, 0.55], [0.47, 0.55], [0.39, 0.86], [0.72, 0.42], [0.54, 0.42], [0.66, 0.15]];
+  function inPoly(pts, x, y) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i], [xj, yj] = pts[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  const SHAPES = {
+    estrella: (x, y) => inPoly(STAR, x, y),
+    anillo: (x, y) => { const d = Math.hypot(x - 0.5, y - 0.5); return d >= 0.16 && d <= 0.32; },
+    rayo: (x, y) => inPoly(BOLT, x, y),
+    hongo: (x, y) => {
+      const cap = y <= 0.52 && ((x - 0.5) / 0.33) ** 2 + ((y - 0.52) / 0.30) ** 2 <= 1;
+      const stem = x >= 0.39 && x <= 0.61 && y >= 0.5 && y <= 0.82;
+      return cap || stem;
+    },
+  };
+  const SHAPE_NAMES = Object.keys(SHAPES);
+
+  function rng(seed) { // mulberry32
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function makeDots(rand) {
+    const dots = [], cell = 0.05, grid = new Map(), R = 0.485, gap = 0.0025;
+    const key = (i, j) => i + ',' + j;
+    for (let tries = 0; tries < 30000; tries++) {
+      const r = 0.006 + 0.014 * Math.pow(rand(), 1.6);
+      const x = rand(), y = rand();
+      if (Math.hypot(x - 0.5, y - 0.5) > R - r) continue;
+      const ci = Math.floor(x / cell), cj = Math.floor(y / cell);
+      let ok = true;
+      for (let di = -1; di <= 1 && ok; di++) for (let dj = -1; dj <= 1 && ok; dj++) {
+        for (const d of grid.get(key(ci + di, cj + dj)) || []) {
+          if (Math.hypot(d.x - x, d.y - y) < d.r + r + gap) { ok = false; break; }
+        }
+      }
+      if (!ok) continue;
+      const dot = { x, y, r };
+      dots.push(dot);
+      const k = key(ci, cj);
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(dot);
+    }
+    return dots;
+  }
+
+  // Devuelve los puntitos ya coloreados. trial = { kind: 'axis'|'control', axis, level, shape, seed }
+  function buildPlate(trial) {
+    const rand = rng(trial.seed);
+    const base = BASES[Math.floor(rand() * BASES.length)];
+    let fig;
+    if (trial.kind === 'control') fig = base.map(v => v * CONTROL_FACTOR);
+    else fig = shiftCone(base, trial.axis, (rand() < 0.5 ? 1 : -1) * contrastFor(trial.axis, trial.level));
+    const inside = SHAPES[trial.shape];
+    return makeDots(rand).map(d => {
+      const n = NOISE[0] + (NOISE[1] - NOISE[0]) * rand();
+      const col = inside(d.x, d.y) ? fig : base;
+      return { x: d.x, y: d.y, r: d.r, color: linToCss(col.map(v => v * n)) };
+    });
+  }
+
+  // Escalera: cada acierto sube un nivel; dos errores en el mismo nivel terminan ese eje.
+  function newStairs() {
+    const s = {};
+    for (const a of AXES) s[a] = { level: 1, fails: 0, trials: 0, done: false, score: null };
+    return s;
+  }
+  function stairUpdate(st, correct) {
+    st.trials++;
+    if (correct) {
+      st.fails = 0;
+      if (st.level >= LEVELS) { st.done = true; st.score = LEVELS; } else st.level++;
+    } else {
+      st.fails++;
+      if (st.fails >= 2) { st.done = true; st.score = st.level - 1; }
+    }
+    if (!st.done && st.trials >= 18) { st.done = true; st.score = st.level - 1; }
+  }
+
+  // ---------- Juego 2: colores cotidianos ----------
+  const PALETTE = [
+    ['Rojo', '#E02020'], ['Bordó', '#7A1C2E'], ['Naranja', '#F07F1A'], ['Salmón', '#F2917A'],
+    ['Marrón', '#7B4A26'], ['Beige', '#D9C29A'], ['Mostaza', '#C49A1C'], ['Amarillo', '#F5D21F'],
+    ['Verde limón', '#A6D433'], ['Verde pasto', '#4CA43A'], ['Verde oscuro', '#2F5E2A'], ['Verde agua', '#4FC3A8'],
+    ['Turquesa', '#1E9AAE'], ['Celeste', '#79BDEB'], ['Azul', '#2457C5'], ['Azul marino', '#1F2A5C'],
+    ['Violeta', '#7B3FB0'], ['Lila', '#B79AD9'], ['Rosa', '#F4A6C0'], ['Fucsia', '#D6338A'],
+    ['Gris', '#8C8C8C'], ['Gris claro', '#C8C8C8'],
+    ['Verde oliva', '#6E7B2B'], ['Terracota', '#B5532F'], ['Morado', '#4B2A7B'],
+  ].map(([name, hex]) => ({ name, hex, lin: hexToLin(hex) }));
+
+  // Simulación de dicromacia (Machado, Oliveira & Fernandes 2009, severidad 1), en RGB lineal
+  const MACHADO = {
+    protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+    deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+    tritan: [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]],
+  };
+  const KINDS = Object.keys(MACHADO);
+  const simulate = (lin, kind) => mul(MACHADO[kind], lin).map(clamp01);
+
+  function linToLab(lin) {
+    const X = 0.4124 * lin[0] + 0.3576 * lin[1] + 0.1805 * lin[2];
+    const Y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    const Z = 0.0193 * lin[0] + 0.1192 * lin[1] + 0.9505 * lin[2];
+    const f = t => t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116;
+    const fx = f(X / 0.95047), fy = f(Y), fz = f(Z / 1.08883);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  }
+  const dE = (a, b) => { const p = linToLab(a), q = linToLab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+  const dESim = (a, b, kind) => dE(simulate(a, kind), simulate(b, kind));
+
+  const MIN_NORMAL_DE = 22; // para alguien con visión típica, las opciones tienen que ser claramente distintas
+
+  // Para un color objetivo elige 3 "trampas": la más confundible para cada tipo de daltonismo.
+  function confusersFor(ti) {
+    const t = PALETTE[ti], used = new Set([ti]), out = [];
+    for (const kind of KINDS) {
+      const ranked = PALETTE.map((c, i) => ({ i, d: dESim(t.lin, c.lin, kind) }))
+        .filter(o => !used.has(o.i) && dE(t.lin, PALETTE[o.i].lin) >= MIN_NORMAL_DE)
+        .sort((a, b) => a.d - b.d);
+      if (!ranked.length) return null;
+      used.add(ranked[0].i);
+      out.push(ranked[0].i);
+    }
+    return out;
+  }
+
+  // Clasifica un par de colores: ¿con qué tipo de daltonismo se vuelven parecidos?
+  // Cuenta como confundible si con ese tipo la diferencia es chica, o se achica a menos de un 25 %.
+  function classifyConfusion(ti, ci) {
+    const a = PALETTE[ti].lin, b = PALETTE[ci].lin, normal = dE(a, b);
+    let best = null;
+    for (const kind of KINDS) {
+      const d = dESim(a, b, kind);
+      if (!best || d < best.d) best = { kind, d };
+    }
+    return best.d < 14 || best.d / normal < 0.25 ? best.kind : 'otro';
+  }
+
+  // Solo se usan como objetivo los colores que tienen al menos una trampa rojo‑verde de verdad.
+  const isGoodTarget = ti => {
+    const c = confusersFor(ti);
+    return !!c && c.some(ci => ['protan', 'deutan'].includes(classifyConfusion(ti, ci)));
+  };
+
+  return {
+    AXES, LEVELS, MAX_C, MIN_C, SHAPE_NAMES, SHAPES, STAR, BOLT, PALETTE, KINDS,
+    contrastFor, buildPlate, newStairs, stairUpdate, confusersFor, classifyConfusion, isGoodTarget,
+    shiftCone, simulate, dE, dESim, hexToLin, linToCss, rng,
+  };
+})();
+if (typeof module !== 'undefined') module.exports = Core;
+</script>
+
+<!-- Interfaz -->
+<script>
+(() => {
+  const $app = document.getElementById('app');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const fmtDate = iso => new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // ---------- Datos (quedan solo en este dispositivo) ----------
+  const STORE_KEY = 'cazadores-de-colores-v1';
+  // El nombre del jugador se escribe en el aparato y queda guardado solo ahí (no está en el código).
+  let db = { players: [], sessions: [], currentPlayer: null };
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) db = JSON.parse(raw);
+  } catch (e) { /* sin almacenamiento: la app funciona igual, sin historial */ }
+  const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {} };
+  const player = id => db.players.find(p => p.id === id);
+  const sessionsOf = (id, mission) => db.sessions.filter(s => s.playerId === id && (!mission || s.mission === mission));
+
+  function deviceLabel() {
+    const ua = navigator.userAgent;
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
+    if (/Android/.test(ua)) return 'Android';
+    if (/Macintosh/.test(ua)) return 'Mac';
+    if (/Windows/.test(ua)) return 'Windows';
+    return 'Otro';
+  }
+
+  // ---------- Íconos de figuras ----------
+  const pts = p => p.map(([x, y]) => (x * 100).toFixed(1) + ',' + (y * 100).toFixed(1)).join(' ');
+  const ICONS = {
+    estrella: `<svg viewBox="0 0 100 100"><polygon points="${pts(Core.STAR)}" fill="#333"/></svg>`,
+    anillo: `<svg viewBox="0 0 100 100"><path fill="#333" fill-rule="evenodd" d="M50 18a32 32 0 1 0 0.01 0zM50 34a16 16 0 1 1-0.01 0z"/></svg>`,
+    rayo: `<svg viewBox="0 0 100 100"><polygon points="${pts(Core.BOLT)}" fill="#333"/></svg>`,
+    hongo: `<svg viewBox="0 0 100 100"><path fill="#333" d="M17 52a33 30 0 0 1 66 0z"/><rect x="39" y="50" width="22" height="32" fill="#333"/></svg>`,
+  };
+  const SHAPE_LABEL = { estrella: 'Estrella', anillo: 'Anillo', rayo: 'Rayo', hongo: 'Hongo' };
+
+  // ---------- Recompensas ----------
+  const CHEERS = ['⭐', '🌟', '✨', '💫'];
+  function cheer() {
+    const el = document.createElement('div');
+    el.className = 'cheer';
+    el.textContent = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 600);
+  }
+
+  // ---------- Pantalla de inicio ----------
+  function newPlayer(first) {
+    $app.innerHTML = `
+      <h1>${first ? '¡Bienvenido a Cazador de colores! 🔍' : 'Nuevo jugador'}</h1>
+      <p>${first ? '¿Cómo se llama quien va a jugar?' : 'Nombre del jugador (por ejemplo: Mamá).'}</p>
+      <input type="text" id="name" maxlength="30" autocomplete="off" placeholder="Nombre">
+      <p class="muted" style="font-size:.9rem">El nombre y los resultados quedan guardados solo en este aparato.</p>
+      <button class="big primary" id="ok">Listo</button>
+      ${first ? '' : '<button class="link" id="back">Volver</button>'}
+    `;
+    const input = $app.querySelector('#name');
+    input.focus();
+    const ok = () => {
+      const name = input.value.trim();
+      if (!name) return input.focus();
+      const p = { id: uid(), name };
+      db.players.push(p); db.currentPlayer = p.id; save(); home();
+    };
+    $app.querySelector('#ok').onclick = ok;
+    input.onkeydown = e => { if (e.key === 'Enter') ok(); };
+    if (!first) $app.querySelector('#back').onclick = home;
+  }
+
+  const curName = () => (player(db.currentPlayer) || {}).name || '';
+
+  function home() {
+    if (!db.players.length) return newPlayer(true);
+    const cur = player(db.currentPlayer) || db.players[0];
+    db.currentPlayer = cur.id;
+    $app.innerHTML = `
+      <h1>¡Hola, ${esc(cur.name)}! 👋</h1>
+      <p class="muted">¿Quién juega?</p>
+      <div class="row">
+        ${db.players.map(p => `<button class="chip ${p.id === cur.id ? 'sel' : ''}" data-p="${p.id}">${esc(p.name)}</button>`).join('')}
+        <button class="chip" id="add">+ Agregar</button>
+      </div>
+      <p class="muted" style="font-size:.9rem">Tip: que también juegue un adulto con visión típica, en este mismo aparato. Así el informe tiene con qué comparar.</p>
+      <button class="big primary" id="m1">🔍 Misión 1: ¿Dónde está escondido?</button>
+      <button class="big primary" id="m2">🎨 Misión 2: ¿Cuál era el color?</button>
+      <button class="big" id="rep">📋 Para papás: informe e historial</button>
+    `;
+    $app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { db.currentPlayer = b.dataset.p; save(); home(); });
+    $app.querySelector('#add').onclick = () => newPlayer(false);
+    $app.querySelector('#m1').onclick = () => checklist(mission1);
+    $app.querySelector('#m2').onclick = () => checklist(mission2);
+    $app.querySelector('#rep').onclick = () => report(db.currentPlayer);
+  }
+
+  function checklist(next) {
+    $app.innerHTML = `
+      <h1>Antes de jugar (para el adulto)</h1>
+      <div class="card">
+        <p>Para que los resultados se puedan comparar entre partidas:</p>
+        <ul>
+          <li>Usen <b>siempre el mismo aparato</b>.</li>
+          <li><b>Brillo de pantalla alto</b>.</li>
+          <li>En iPhone o Mac: <b>Night Shift apagado</b> y, en el iPhone, <b>True Tone apagado</b> (Ajustes &gt; Pantalla y brillo).</li>
+          <li>Una habitación con luz normal, sin sol directo sobre la pantalla.</li>
+          <li>Sin anteojos de colores ni filtros de color.</li>
+          <li>Que juegue <b>sin ayuda</b>. Si no ve nada, que toque "No veo nada": también suma estrellas.</li>
+        </ul>
+      </div>
+      <button class="big primary" id="go">¡Listo, a jugar!</button>
+      <button class="link" id="back">Volver</button>
+    `;
+    $app.querySelector('#go').onclick = next;
+    $app.querySelector('#back').onclick = home;
+  }
+
+  // ---------- Misión 1 ----------
+  function drawPlate(canvas, trial) {
+    const size = canvas.getBoundingClientRect().width;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.height = Math.round(size * dpr);
+    const ctx = canvas.getContext('2d');
+    const S = canvas.width;
+    ctx.fillStyle = '#3a3a3f';
+    ctx.fillRect(0, 0, S, S);
+    for (const d of Core.buildPlate(trial)) {
+      ctx.fillStyle = d.color;
+      ctx.beginPath();
+      ctx.arc(d.x * S, d.y * S, d.r * S, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function mission1() {
+    const stairs = Core.newStairs();
+    const log = [];
+    let stars = 0, n = 0, controls = 0, lastShape = null;
+    const tutorial = [{ kind: 'control', shape: 'estrella' }, { kind: 'control', shape: 'anillo' }];
+    let tutoIdx = 0;
+
+    function nextTrial() {
+      const shape = shuffle(Core.SHAPE_NAMES.filter(s => s !== lastShape))[0];
+      lastShape = shape;
+      const seed = Math.floor(Math.random() * 2 ** 31);
+      if (tutoIdx < tutorial.length) return { ...tutorial[tutoIdx++], seed, tutorial: true };
+      const open = Core.AXES.filter(a => !stairs[a].done);
+      if (!open.length) return null;
+      n++;
+      if (n % 7 === 4 && controls < 4) { controls++; return { kind: 'control', shape, seed }; }
+      const axis = open[Math.floor(Math.random() * open.length)];
+      return { kind: 'axis', axis, level: stairs[axis].level, shape, seed };
+    }
+
+    function show(trial) {
+      if (!trial) return finish();
+      $app.innerHTML = `
+        <div class="topbar no-print"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${stars}</span></div>
+        <p class="hint">${trial.tutorial ? `${esc(curName())}, entre los puntitos se esconde una figura. ¿Cuál es?` : '¿Qué figura está escondida?'}</p>
+        <div class="plate-wrap"><canvas class="plate"></canvas></div>
+        <div class="answers">
+          ${Core.SHAPE_NAMES.map(s => `<button data-a="${s}">${ICONS[s]}<span>${SHAPE_LABEL[s]}</span></button>`).join('')}
+          <button class="none" data-a="nada">🙈 No veo nada</button>
+        </div>
+      `;
+      drawPlate($app.querySelector('canvas'), trial);
+      $app.querySelector('#quit').onclick = home;
+      $app.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+        const correct = b.dataset.a === trial.shape;
+        stars++; cheer();
+        if (!trial.tutorial) {
+          log.push({ kind: trial.kind, axis: trial.axis || null, level: trial.level || null, shape: trial.shape, answer: b.dataset.a, correct });
+          if (trial.kind === 'axis') Core.stairUpdate(stairs[trial.axis], correct);
+        }
+        setTimeout(() => show(nextTrial()), 350);
+      });
+    }
+
+    function finish() {
+      const scores = {};
+      for (const a of Core.AXES) scores[a] = stairs[a].score;
+      const ctrl = log.filter(t => t.kind === 'control');
+      db.sessions.push({
+        id: uid(), playerId: db.currentPlayer, mission: 1, date: new Date().toISOString(), device: deviceLabel(),
+        scores, controls: { ok: ctrl.filter(t => t.correct).length, total: ctrl.length }, trials: log,
+      });
+      save();
+      celebrate(stars);
+    }
+
+    show(nextTrial());
+  }
+
+  // ---------- Misión 2 ----------
+  function mission2() {
+    const ROUNDS = 14;
+    const candidates = Core.PALETTE.map((_, i) => i).filter(Core.isGoodTarget);
+    const targets = shuffle(candidates).slice(0, ROUNDS);
+    const answers = [];
+    let stars = 0, k = 0;
+
+    function show() {
+      if (k >= targets.length) return finish();
+      const ti = targets[k];
+      const opts = shuffle([ti, ...Core.confusersFor(ti)]);
+      $app.innerHTML = `
+        <div class="topbar"><button class="link" id="quit">Salir</button><span class="stars">⭐ ${stars}</span></div>
+        <p class="hint">Mirá bien este color… ¡después se esconde!</p>
+        <div class="target" style="background:${Core.PALETTE[ti].hex}"></div>
+        <div class="opts" style="visibility:hidden">
+          ${opts.map(i => `<button data-i="${i}" style="background:${Core.PALETTE[i].hex}" aria-label="opción"></button>`).join('')}
+        </div>
+      `;
+      $app.querySelector('#quit').onclick = home;
+      setTimeout(() => {
+        const t = $app.querySelector('.target');
+        if (!t) return;
+        t.classList.add('hidden'); t.textContent = '?';
+        $app.querySelector('.hint').textContent = '¿Cuál era el color?';
+        const o = $app.querySelector('.opts');
+        o.style.visibility = 'visible';
+        o.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+          const ci = +b.dataset.i;
+          answers.push({ target: ti, chosen: ci, correct: ci === ti });
+          stars++; cheer(); k++;
+          setTimeout(show, 350);
+        });
+      }, 2200);
+    }
+
+    function finish() {
+      db.sessions.push({ id: uid(), playerId: db.currentPlayer, mission: 2, date: new Date().toISOString(), device: deviceLabel(), answers });
+      save();
+      celebrate(stars);
+    }
+
+    show();
+  }
+
+  function celebrate(stars) {
+    $app.innerHTML = `
+      <div style="text-align:center;padding-top:10vh">
+        <div style="font-size:5rem">🏆</div>
+        <h1>¡Misión cumplida, ${esc(curName())}!</h1>
+        <p style="font-size:1.4rem">Juntaste <b>${stars}</b> estrellas ⭐</p>
+        <button class="big primary" id="home">Volver al inicio</button>
+      </div>
+    `;
+    $app.querySelector('#home').onclick = home;
+  }
+
+  // ---------- Informe para la familia ----------
+  const AXIS_INFO = {
+    L: { title: 'Sensor del rojo', tech: 'eje protán' },
+    M: { title: 'Sensor del verde', tech: 'eje deután' },
+    S: { title: 'Sensor del azul', tech: 'eje tritán' },
+  };
+  function scoreText(s) {
+    if (s >= 8) return 'Ve bien incluso diferencias muy finas.';
+    if (s >= 5) return 'Ve las diferencias medianas; le cuestan las más finas.';
+    if (s >= 2) return 'Solo ve las diferencias grandes.';
+    return 'En esta pantalla casi no distingue estas diferencias.';
+  }
+  const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  function mission1Summary(id) {
+    const ss = sessionsOf(id, 1);
+    if (!ss.length) return null;
+    const out = { n: ss.length, avg: {}, min: {}, max: {}, controlsOk: 0, controlsTotal: 0 };
+    for (const a of Core.AXES) {
+      const v = ss.map(s => s.scores[a]);
+      out.avg[a] = avg(v); out.min[a] = Math.min(...v); out.max[a] = Math.max(...v);
+    }
+    for (const s of ss) { out.controlsOk += s.controls.ok; out.controlsTotal += s.controls.total; }
+    return out;
+  }
+
+  function confusionPairs(id) {
+    const pairs = new Map();
+    let total = 0, wrong = 0;
+    for (const s of sessionsOf(id, 2)) for (const a of s.answers) {
+      total++;
+      if (a.correct) continue;
+      wrong++;
+      const key = [a.target, a.chosen].sort((x, y) => x - y).join('-');
+      const p = pairs.get(key) || { a: a.target, b: a.chosen, count: 0, kind: Core.classifyConfusion(a.target, a.chosen) };
+      p.count++;
+      pairs.set(key, p);
+    }
+    return { total, wrong, list: [...pairs.values()].sort((x, y) => y.count - x.count) };
+  }
+
+  function interpret(sum, conf) {
+    const lines = [];
+    let redGreen = false;
+    if (sum) {
+      const { L, M, S } = sum.avg;
+      const rg = Math.min(L, M);
+      if (L >= 7 && M >= 7 && S >= 7) {
+        lines.push('En la misión de las figuras escondidas <b>no aparecieron dificultades claras</b> con ningún tipo de color.');
+      } else if (Math.max(L, M, S) < 5) {
+        lines.push('Le costaron <b>todos</b> los tipos de color por igual. Puede ser cansancio, falta de atención o la pantalla. Conviene repetir otro día.');
+      } else if (rg < 7 && S - rg >= 2) {
+        redGreen = true;
+        let sub = '';
+        if (M - L >= 2) sub = ' Parece más relacionado con el <b>sensor del rojo</b> (tipo "protán").';
+        else if (L - M >= 2) sub = ' Parece más relacionado con el <b>sensor del verde</b> (tipo "deután", el más común).';
+        else sub = ' Con este juego no se puede saber si es del tipo "rojo" o del tipo "verde"; eso lo define el oftalmólogo.';
+        lines.push('Le cuesta distinguir los colores que dependen de los sensores del <b>rojo y del verde</b>. Es la forma más común de daltonismo.' + sub);
+      } else if (S < 7 && Math.min(L, M) - S >= 2) {
+        lines.push('Le cuestan más las diferencias del <b>sensor del azul</b> (azul‑amarillo). Es un tipo poco común: <b>vale la pena comentarlo al oftalmólogo</b>.');
+      } else {
+        lines.push('Mostró algunas dificultades, pero sin un patrón claro. Conviene jugar más partidas para ver si se repite.');
+      }
+      if (sum.controlsTotal && sum.controlsOk / sum.controlsTotal < 0.75) {
+        lines.push('⚠️ Falló algunas láminas "fáciles" que ve cualquier persona: puede que haya estado cansado o distraído. Tomar este resultado con cuidado.');
+      }
+    }
+    if (conf.total) {
+      const rgConf = conf.list.filter(p => p.kind === 'protan' || p.kind === 'deutan').reduce((a, p) => a + p.count, 0);
+      if (!conf.wrong) lines.push('En la misión de los colores cotidianos <b>no confundió ningún color</b>.');
+      else {
+        lines.push(`En la misión de los colores cotidianos confundió <b>${conf.wrong} de ${conf.total}</b> colores.`);
+        if (rgConf / conf.wrong >= 0.6) { redGreen = true; lines.push('La mayoría de esas confusiones son <b>típicas del daltonismo rojo‑verde</b>.'); }
+      }
+    }
+    if (!lines.length) lines.push('Todavía no hay partidas. Jueguen al menos una vez cada misión para armar el informe.');
+    return { html: lines.map(l => `<p>${l}</p>`).join(''), redGreen };
+  }
+
+  function bars(sum, ref, refName) {
+    return Core.AXES.map(a => {
+      const v = sum.avg[a];
+      const range = sum.n > 1 ? ` · entre ${sum.min[a]} y ${sum.max[a]} en ${sum.n} partidas` : '';
+      return `
+        <div class="bar-row">
+          <div class="bar-label"><span>${AXIS_INFO[a].title}</span><span>${v.toFixed(1)} / ${Core.LEVELS}</span></div>
+          <div class="bar"><span style="width:${v / Core.LEVELS * 100}%"></span></div>
+          <div class="bar-text">${scoreText(v)}${range}</div>
+          ${ref ? `<div class="bar ref" style="height:10px"><span style="width:${ref.avg[a] / Core.LEVELS * 100}%"></span></div>
+                   <div class="bar-text">${esc(refName)} (para comparar): ${ref.avg[a].toFixed(1)} / ${Core.LEVELS}</div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  function report(id, refId) {
+    const p = player(id);
+    const others = db.players.filter(o => o.id !== id && sessionsOf(o.id, 1).length);
+    if (refId === undefined && others.length) refId = others[0].id;
+    const sum = mission1Summary(id);
+    const ref = refId ? mission1Summary(refId) : null;
+    const conf = confusionPairs(id);
+    const interp = interpret(sum, conf);
+    const all = sessionsOf(id).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const devices = [...new Set(all.map(s => s.device))];
+
+    $app.innerHTML = `
+      <div class="topbar no-print">
+        <button class="link" id="back">← Volver</button>
+        <button class="primary" id="print">Imprimir o guardar PDF</button>
+      </div>
+      <div class="card">
+        <h1>Informe de colores: ${esc(p.name)}</h1>
+        <p class="muted">Generado el ${fmtDate(new Date().toISOString())} · ${all.length} partida${all.length === 1 ? '' : 's'}${devices.length ? ' · Aparato: ' + devices.map(esc).join(', ') : ''}</p>
+        <div class="notice">
+          <b>Importante:</b> este informe sale de un juego hecho en casa, en una pantalla común. Sirve para <b>orientar y conversar</b>, no es un diagnóstico.
+          El tipo y el grado de daltonismo los confirma un <b>oftalmólogo</b>.
+        </div>
+
+        <h2>En pocas palabras</h2>
+        ${interp.html}
+
+        <h2>Cómo ve los colores el ojo</h2>
+        <p>El ojo tiene tres tipos de <b>"sensores" de color</b>: uno para el rojo, uno para el verde y uno para el azul. Todos los colores que vemos salen de la mezcla de lo que captan esos tres.</p>
+        <p>En el daltonismo más común, el sensor del rojo o el del verde funciona distinto. Entonces algunos colores que para la mayoría son diferentes, a esa persona le parecen <b>iguales o muy parecidos</b>. No es un problema de atención, de inteligencia ni de "no saberse los colores": <b>es cómo llega la imagen al cerebro</b>. No empeora con el tiempo.</p>
+
+        ${sum ? `
+        <h2>¿Qué tan finas son las diferencias que ve?</h2>
+        <p class="muted">Misión "¿Dónde está escondido?": hay que encontrar una figura escondida entre puntitos. Cada lámina pone a prueba un solo sensor, y la diferencia se achica nivel a nivel. <b>Más alto = ve diferencias más finas.</b></p>
+        ${others.length ? `<p class="no-print">Comparar con: <select id="ref">${others.map(o => `<option value="${o.id}" ${o.id === refId ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}<option value="" ${!refId ? 'selected' : ''}>nadie</option></select></p>` : ''}
+        ${bars(sum, ref, ref ? player(refId).name : '')}
+        ${!ref ? '<p class="muted" style="font-size:.9rem">Para que estos números signifiquen más, conviene que juegue un adulto con visión típica en el mismo aparato y compararlos.</p>' : ''}
+        ` : ''}
+
+        ${conf.total ? `
+        <h2>Colores que se le confundieron</h2>
+        <p class="muted">Misión "¿Cuál era el color?": se muestra un color, se esconde, y hay que encontrarlo entre cuatro. Las otras tres opciones son colores que suelen confundir las personas con distintos tipos de daltonismo.</p>
+        ${conf.list.length ? conf.list.map(pr => `
+          <div class="pair">
+            <div class="sw" style="background:${Core.PALETTE[pr.a].hex}"></div>
+            <div class="sw" style="background:${Core.PALETTE[pr.b].hex}"></div>
+            <div><b>${Core.PALETTE[pr.a].name}</b> con <b>${Core.PALETTE[pr.b].name}</b>
+              <div class="bar-text">${pr.count} ${pr.count === 1 ? 'vez' : 'veces'}${pr.kind === 'protan' || pr.kind === 'deutan' ? ' · típico del rojo‑verde' : pr.kind === 'tritan' ? ' · típico del azul‑amarillo' : ''}</div></div>
+          </div>`).join('') : '<p>No confundió ningún color. 🎉</p>'}
+        <p class="muted" style="font-size:.9rem">Ojo: los colores impresos o en otra pantalla se ven un poco distintos a como los vio en el juego.</p>
+        ` : ''}
+
+        <h2>Qué puede significar en el día a día</h2>
+        ${interp.redGreen ? `
+        <ul>
+          <li>Puede confundir <b>verde con marrón o naranja</b>, <b>rojo con marrón o verde oscuro</b>, <b>azul con violeta</b>, <b>rosa o turquesa con gris</b>. Con poca luz o con colores apagados le cuesta más.</li>
+          <li>Suele reconocer bien los colores fuertes y "puros" (rojo de semáforo, amarillo). Puede que haya aprendido a nombrarlos por cómo se ven de claros u oscuros.</li>
+          <li>Puede que <b>nombre mal un color aunque lo esté viendo bien</b> en lo demás: no es que "no presta atención".</li>
+        </ul>` : `
+        <p>Con los resultados actuales no hay un patrón claro. Si en casa o en la escuela notan confusiones de colores, conviene anotarlas con fecha y contárselas al oftalmólogo.</p>`}
+
+        <h2>Sugerencias para la escuela, la psicopedagoga y otros terapeutas</h2>
+        <ul>
+          <li><b>Que no dependa solo del color</b>: sumar formas, letras, números, rayado o posición (por ejemplo, "el grupo de los triángulos", no "el grupo verde").</li>
+          <li>En evaluaciones y fichas, no penalizar errores de color si el objetivo era otro (lectura, matemática, motricidad).</li>
+          <li>Evitar <b>tiza de color sobre pizarrón verde</b> (sobre todo roja o verde) y los gráficos o mapas que solo se distinguen por color.</li>
+          <li>Útiles <b>etiquetados con el nombre del color</b>, siempre en el mismo orden en la cartuchera o caja.</li>
+          <li>En plástica, dejar que use los colores "a su manera" o darle el nombre del color cuando la consigna lo pida.</li>
+          <li>No hacerle "examen de colores" delante de otros ni festejar cuando se equivoca. Tratarlo con naturalidad y, si pregunta, explicárselo como "tus ojos ven los colores un poco distinto".</li>
+          <li>En las sesiones de psicopedagogía, tener en cuenta que <b>los materiales codificados por color</b> (regletas, bloques, juegos de clasificación) pueden confundirlo: conviene chequear que distinga las piezas antes de evaluar otra cosa.</li>
+        </ul>
+
+        ${all.length ? `
+        <h2>Historial de partidas</h2>
+        <table>
+          <tr><th>Fecha</th><th>Misión</th><th>Resultado</th></tr>
+          ${all.map(s => `<tr>
+            <td>${fmtDate(s.date)}</td>
+            <td>${s.mission === 1 ? 'Figuras escondidas' : 'Colores cotidianos'}</td>
+            <td>${s.mission === 1
+              ? `Rojo ${s.scores.L} · Verde ${s.scores.M} · Azul ${s.scores.S} <span class="muted">(de ${Core.LEVELS})</span>${s.controls.total && s.controls.ok < s.controls.total ? ` <span class="muted">· falló ${s.controls.total - s.controls.ok} lámina(s) fácil(es)</span>` : ''}`
+              : `Acertó ${s.answers.filter(a => a.correct).length} de ${s.answers.length}`}</td>
+          </tr>`).join('')}
+        </table>
+        <p class="muted" style="font-size:.9rem">Si los resultados se parecen entre partidas, son más confiables. Una partida sola puede estar afectada por el cansancio.</p>
+        ` : ''}
+
+        ${sum ? `
+        <h2 class="tech">Datos técnicos (para el oftalmólogo)</h2>
+        <p class="tech">Láminas pseudoisocromáticas generadas por modulación de un solo cono (espacio LMS de Viénot et al. 1999, sRGB sin calibrar), con ruido de luminancia por punto (×${'0.72–1.12'}). Escalera de 10 niveles logarítmicos por eje. Nivel 1 → nivel 10 en contraste de cono: L ${(Core.MAX_C.L * 100).toFixed(1)}%→${(Core.MIN_C.L * 100).toFixed(1)}%, M ${(Core.MAX_C.M * 100).toFixed(1)}%→${(Core.MIN_C.M * 100).toFixed(1)}%, S ${(Core.MAX_C.S * 100).toFixed(1)}%→${(Core.MIN_C.S * 100).toFixed(1)}%. Puntaje = último nivel superado (2 errores en un nivel terminan el eje; 4 opciones + "no veo"). Láminas de control de luminancia: ${sum.controlsOk}/${sum.controlsTotal} correctas. Misión 2: recuerdo de color con distractores elegidos por simulación de Machado et al. 2009.</p>
+        ` : ''}
+      </div>
+
+      <div class="card no-print">
+        <h2 style="margin-top:0">Copia de seguridad</h2>
+        <p class="muted">Los datos quedan guardados solo en este aparato y en este navegador. Para no perderlos, o para pasarlos a otro aparato, descarguen una copia.</p>
+        <div class="row">
+          <button id="export">Descargar copia</button>
+          <label class="row"><button id="importBtn">Cargar copia</button><input type="file" id="import" accept="application/json" hidden></label>
+        </div>
+      </div>
+    `;
+    $app.querySelector('#back').onclick = home;
+    $app.querySelector('#print').onclick = () => window.print();
+    const sel = $app.querySelector('#ref');
+    if (sel) sel.onchange = () => report(id, sel.value || null);
+    $app.querySelector('#export').onclick = () => {
+      const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cazadores-de-colores-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    const file = $app.querySelector('#import');
+    $app.querySelector('#importBtn').onclick = () => file.click();
+    file.onchange = async () => {
+      try {
+        const data = JSON.parse(await file.files[0].text());
+        if (!Array.isArray(data.players) || !Array.isArray(data.sessions)) throw new Error('formato');
+        // Unir sin duplicar
+        for (const pl of data.players) if (!player(pl.id)) db.players.push(pl);
+        const have = new Set(db.sessions.map(s => s.id));
+        for (const s of data.sessions) if (!have.has(s.id)) db.sessions.push(s);
+        save();
+        report(id, refId);
+      } catch (e) { alert('No se pudo leer ese archivo.'); }
+    };
+  }
+
+  home();
+})();
+</script>
+</body>
+</html>
