@@ -211,8 +211,18 @@
       <input type="text" id="name" maxlength="30" autocomplete="off" placeholder="${first ? 'Tu nombre' : 'Por ejemplo: Mamá'}">
       <p style="font-size:.9rem;opacity:.9">El nombre y los resultados quedan guardados solo en este aparato.</p>
       <button class="big primary" id="ok" style="background:#1b1b3a;border-color:#ffc83d">¡Listo!</button>
-      ${first ? '' : '<button class="link" id="back">Volver</button>'}
+      ${first ? `<button class="link" id="restore">¿Ya jugaba en otro aparato? Cargar una copia</button>
+        <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
+        <p id="restoreMsg" style="font-weight:700"></p>` : '<button class="link" id="back">Volver</button>'}
     `;
+    if (first) {
+      const f = $app.querySelector('#restoreFile');
+      $app.querySelector('#restore').onclick = () => f.click();
+      f.onchange = async () => {
+        try { mergeBackup(JSON.parse(await f.files[0].text())); home(); }
+        catch (e) { $app.querySelector('#restoreMsg').textContent = 'No se pudo leer ese archivo. Tiene que ser la copia que se descarga desde la app (termina en .json).'; }
+      };
+    }
     const input = $app.querySelector('#name');
     input.focus();
     const ok = () => {
@@ -544,12 +554,113 @@
       </div>
       <button class="big primary" id="rep">📋 Informe e historial de ${esc(cur.name)}</button>
       <button class="big" id="sim">👓 Así ve ${esc(cur.name)} (simulador)</button>
+      <button class="big" id="dev">📲 Cambiar de aparato / copia de seguridad</button>
     `;
     $app.querySelector('#back').onclick = home;
     $app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { db.currentPlayer = b.dataset.p; save(); parents(); });
     $app.querySelector('#add').onclick = () => newPlayer(false);
     $app.querySelector('#rep').onclick = () => report(db.currentPlayer);
     $app.querySelector('#sim').onclick = () => simulator(db.currentPlayer);
+    $app.querySelector('#dev').onclick = devices;
+  }
+
+  // ---------- Copia de seguridad y cambio de aparato ----------
+  // Une una copia con lo que hay en este aparato, sin duplicar. Trae también las misiones a medias.
+  function mergeBackup(data) {
+    if (!data || !Array.isArray(data.players) || !Array.isArray(data.sessions)) throw new Error('formato');
+    const hasActivity = id => sessionsOf(id).length || Object.keys(db.progress || {}).some(k => k.startsWith(id + ':'));
+    for (const pl of data.players) {
+      if (player(pl.id)) continue;
+      // Si acá ya crearon un jugador con el mismo nombre que todavía no jugó, lo reemplaza el de la copia.
+      const twin = db.players.find(p => p.name.trim().toLowerCase() === pl.name.trim().toLowerCase() && !hasActivity(p.id));
+      if (twin) {
+        db.players = db.players.filter(p => p !== twin);
+        if (db.currentPlayer === twin.id) db.currentPlayer = pl.id;
+      }
+      db.players.push({ id: pl.id, name: pl.name });
+    }
+    const have = new Set(db.sessions.map(s => s.id));
+    let added = 0;
+    for (const s of data.sessions) if (!have.has(s.id)) { db.sessions.push(s); added++; }
+    // Misiones a medias: se traen si acá no hay una en curso para ese jugador y misión.
+    db.progress = db.progress || {};
+    let resumed = 0;
+    for (const [k, v] of Object.entries(data.progress || {})) if (!(k in db.progress)) { db.progress[k] = v; resumed++; }
+    if (!player(db.currentPlayer)) db.currentPlayer = player(data.currentPlayer) ? data.currentPlayer : (db.players[0] || {}).id || null;
+    save();
+    return { added, resumed, names: data.players.map(p => p.name) };
+  }
+
+  // En el celular abre el menú Compartir (WhatsApp, Mail, Archivos); en la compu descarga el archivo.
+  async function exportBackup() {
+    const name = 'cazador-de-colores-' + new Date().toISOString().slice(0, 10) + '.json';
+    const file = new File([JSON.stringify(db, null, 2)], name, { type: 'application/json' });
+    if (navigator.maxTouchPoints > 0 && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Copia de Cazador de colores' }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function devices() {
+    setTheme('parents');
+    const url = location.origin + location.pathname;
+    $app.innerHTML = `
+      <div class="topbar"><button class="link" id="back">← Volver</button></div>
+      <h1>📲 Cambiar de aparato</h1>
+      <p class="muted">Los jugadores, las partidas y las misiones a medias se guardan <b>solo en este aparato</b>. Para pasarlos a otro (un iPhone nuevo, la notebook) o para tener un respaldo, se hace una copia:</p>
+      <div class="card">
+        <h2 style="margin-top:0">1. En este aparato: hacer la copia</h2>
+        <button class="primary" id="export">📤 Enviar o descargar copia</button>
+        <ul>
+          <li><b>En el iPhone</b> se abre el menú Compartir: elijan <b>WhatsApp</b> o <b>Mail</b> y mándensela a ustedes mismos, o elijan <b>Guardar en Archivos</b>.</li>
+          <li><b>En la compu</b> se descarga un archivo que termina en <b>.json</b>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">2. En el otro aparato: cargar la copia</h2>
+        <ul>
+          <li>Abran <b>${esc(url)}</b>. En el iPhone, agréguenlo a la pantalla de inicio y ábranlo <b>desde el ícono</b>.</li>
+          <li>Si es la primera vez, en la bienvenida toquen <b>"¿Ya jugaba en otro aparato? Cargar una copia"</b>. Si ya lo venían usando, entren a esta misma pantalla y toquen <b>Cargar copia</b>.</li>
+          <li><b>En el iPhone</b> el archivo tiene que estar en la app Archivos: si llegó por WhatsApp o Mail, ábranlo, toquen <b>Compartir → Guardar en Archivos</b> y después elíjanlo desde acá.</li>
+        </ul>
+        <button id="importBtn">📥 Cargar copia</button>
+        <input type="file" id="import" accept=".json,application/json,text/plain" hidden>
+        <p id="importMsg" style="font-weight:700"></p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">3. ¡Listo!</h2>
+        <p>Aparecen los jugadores y todas sus partidas en el informe, y si había una misión a medias, <b>sigue desde donde quedó</b>. Cargar la misma copia dos veces no duplica nada.</p>
+        <p class="muted">Consejo: hagan una copia de vez en cuando, por si se rompe o se cambia el teléfono.</p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">Empezar de cero</h2>
+        <p class="muted">Borra todos los jugadores y resultados guardados en este aparato.</p>
+        <button id="reset">Borrar todos los datos</button>
+      </div>
+    `;
+    $app.querySelector('#back').onclick = parents;
+    $app.querySelector('#export').onclick = exportBackup;
+    const file = $app.querySelector('#import'), msg = $app.querySelector('#importMsg');
+    $app.querySelector('#importBtn').onclick = () => file.click();
+    file.onchange = async () => {
+      try {
+        const r = mergeBackup(JSON.parse(await file.files[0].text()));
+        msg.textContent = `✅ Copia cargada (${r.names.join(', ')}): ${r.added} partida${r.added === 1 ? '' : 's'} nueva${r.added === 1 ? '' : 's'}` +
+          (r.resumed ? ` y ${r.resumed} misión${r.resumed === 1 ? '' : 'es'} a medias para seguir.` : '.');
+      } catch (e) { msg.textContent = '❌ No se pudo leer ese archivo. Tiene que ser la copia que se descarga desde la app (termina en .json).'; }
+      file.value = '';
+    };
+    $app.querySelector('#reset').onclick = () => {
+      if (!confirm('¿Borrar todos los jugadores y resultados de este aparato? No se puede deshacer.')) return;
+      db = { players: [], sessions: [], currentPlayer: null };
+      save();
+      home();
+    };
   }
 
   // ---------- Informe para la familia ----------
@@ -833,51 +944,11 @@
         <p class="tech">${sum ? `Láminas pseudoisocromáticas generadas por modulación de un solo cono (espacio LMS de Viénot et al. 1999, sRGB sin calibrar), con ruido de luminancia por punto (×0.72–1.12). Escalera de 10 niveles logarítmicos por eje. Nivel 1 → nivel 10 en contraste de cono: L ${(Core.MAX_C.L * 100).toFixed(1)}%→${(Core.MIN_C.L * 100).toFixed(1)}%, M ${(Core.MAX_C.M * 100).toFixed(1)}%→${(Core.MIN_C.M * 100).toFixed(1)}%, S ${(Core.MAX_C.S * 100).toFixed(1)}%→${(Core.MIN_C.S * 100).toFixed(1)}%. Puntaje = último nivel superado (2 errores en un nivel terminan el eje; 4 opciones + "no veo"). Láminas de control de luminancia intercaladas: ${sum.controlsOk}/${sum.controlsTotal} correctas. ` : ''}Memoria de colores: recuerdo de color con distractores elegidos por simulación de Machado et al. 2009. Nombrar colores: 10 categorías básicas; distractores = las 2 categorías más confundibles en simulación protán/deután + 1 al azar.</p>
         ` : ''}
       </div>
-
-      <div class="card no-print">
-        <h2 style="margin-top:0">Copia de seguridad</h2>
-        <p class="muted">Los datos quedan guardados solo en este aparato y en este navegador. Para no perderlos, o para pasarlos a otro aparato, descarguen una copia.</p>
-        <div class="row">
-          <button id="export">Descargar copia</button>
-          <label class="row"><button id="importBtn">Cargar copia</button><input type="file" id="import" accept="application/json" hidden></label>
-        </div>
-        <h2>Empezar de cero</h2>
-        <p class="muted">Borra todos los jugadores y resultados guardados en este aparato.</p>
-        <button id="reset">Borrar todos los datos</button>
-      </div>
     `;
     $app.querySelector('#back').onclick = parents;
     $app.querySelector('#print').onclick = () => window.print();
     const sel = $app.querySelector('#ref');
     if (sel) sel.onchange = () => report(id, sel.value || null);
-    $app.querySelector('#export').onclick = () => {
-      const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'cazador-de-colores-' + new Date().toISOString().slice(0, 10) + '.json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    };
-    const file = $app.querySelector('#import');
-    $app.querySelector('#importBtn').onclick = () => file.click();
-    $app.querySelector('#reset').onclick = () => {
-      if (!confirm('¿Borrar todos los jugadores y resultados de este aparato? No se puede deshacer.')) return;
-      db = { players: [], sessions: [], currentPlayer: null };
-      save();
-      home();
-    };
-    file.onchange = async () => {
-      try {
-        const data = JSON.parse(await file.files[0].text());
-        if (!Array.isArray(data.players) || !Array.isArray(data.sessions)) throw new Error('formato');
-        // Unir sin duplicar
-        for (const pl of data.players) if (!player(pl.id)) db.players.push(pl);
-        const have = new Set(db.sessions.map(s => s.id));
-        for (const s of data.sessions) if (!have.has(s.id)) db.sessions.push(s);
-        save();
-        report(id, refId);
-      } catch (e) { alert('No se pudo leer ese archivo.'); }
-    };
   }
 
   // ---------- Simulador "Así ve…" ----------
