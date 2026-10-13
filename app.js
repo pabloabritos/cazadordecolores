@@ -61,10 +61,23 @@
   }
 
   // ---------- Dibujos ----------
-  const MASCOT = `<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">
-    <polygon points="22,58 14,22 40,38 48,6 62,32 80,4 84,36 108,20 98,58" fill="#2f6feb" stroke="#1a47a8" stroke-width="3" stroke-linejoin="round"/>
-    <circle cx="60" cy="68" r="40" fill="#ffc93c" stroke="#e08e00" stroke-width="4"/>
-    <polygon points="58,34 50,50 58,50 54,62 68,44 60,44 64,34" fill="#ff8a00"/>
+  // Compañero (mascota): cada jugador elige piel, pelo, rayo y nombre. Se guarda en el jugador.
+  const DEFAULT_PET = { name: 'Chispa', skin: '#ffc93c', hair: '#2f6feb', bolt: '#ff8a00' };
+  const PET_COLORS = {
+    skin: [['amarillo', '#ffc93c'], ['naranja', '#ff9f43'], ['rosa', '#ff8fb1'], ['celeste', '#6ec6ff'], ['verde', '#7bd389'],
+           ['violeta', '#b39ddb'], ['blanco', '#f5f5f5'], ['marrón', '#a47148'], ['rojo', '#f25f5c'], ['gris', '#b0b0b0']],
+    hair: [['azul', '#2f6feb'], ['rojo', '#e53935'], ['negro', '#263238'], ['amarillo', '#fdd835'], ['verde', '#43a047'],
+           ['violeta', '#7e57c2'], ['naranja', '#fb8c00'], ['rosa', '#ec407a'], ['blanco', '#eceff1'], ['marrón', '#6d4c41']],
+    bolt: [['naranja', '#ff8a00'], ['amarillo', '#ffd600'], ['rojo', '#e53935'], ['azul', '#1e88e5'], ['verde', '#43a047'],
+           ['violeta', '#8e24aa'], ['rosa', '#ec407a'], ['celeste', '#29b6f6'], ['blanco', '#ffffff'], ['negro', '#212121']],
+  };
+  const PET_NAMES = ['Chispa', 'Turbo', 'Rayito', 'Kiwi', 'Cometa', 'Bolita'];
+  const darken = (hex, f = 0.7) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
+  const curPet = () => ({ ...DEFAULT_PET, ...((player(db.currentPlayer) || {}).pet || {}) });
+  const petSvg = (pet = curPet()) => `<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">
+    <polygon points="22,58 14,22 40,38 48,6 62,32 80,4 84,36 108,20 98,58" fill="${pet.hair}" stroke="${darken(pet.hair)}" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="60" cy="68" r="40" fill="${pet.skin}" stroke="${darken(pet.skin)}" stroke-width="4"/>
+    <polygon points="58,34 50,50 58,50 54,62 68,44 60,44 64,34" fill="${pet.bolt}" stroke="${darken(pet.bolt, 0.6)}" stroke-width="1.5" stroke-linejoin="round"/>
     <ellipse cx="45" cy="66" rx="9" ry="11" fill="#fff"/><ellipse cx="75" cy="66" rx="9" ry="11" fill="#fff"/>
     <circle cx="47" cy="68" r="5.5" fill="#1b1b2a"/><circle cx="77" cy="68" r="5.5" fill="#1b1b2a"/>
     <circle cx="49" cy="65.5" r="2" fill="#fff"/><circle cx="79" cy="65.5" r="2" fill="#fff"/>
@@ -200,13 +213,13 @@
   };
   const gameTop = (label, frac, stars) => `
     <div class="gtop"><button class="quit" id="quit">✕</button>${progressBar(label, frac)}<span class="stars">⭐ ${stars}</span></div>`;
-  const guide = html => `<div class="guide">${MASCOT}<div class="bubble">${html}</div></div>`;
+  const guide = html => `<div class="guide">${petSvg()}<div class="bubble">${html}</div></div>`;
 
   // ---------- Inicio ----------
   function newPlayer(first) {
     setTheme('menu');
     $app.innerHTML = `
-      <div class="hero">${MASCOT}<div class="bubble"><span class="fun">${first ? '¡Hola! Soy Chispa ⚡' : 'Nuevo jugador'}</span>${first ? 'Vamos a cazar colores juntos.' : ''}</div></div>
+      <div class="hero">${petSvg(DEFAULT_PET)}<div class="bubble"><span class="fun">${first ? '¡Hola! Soy tu compañero ⚡' : 'Nuevo jugador'}</span>${first ? 'Vamos a cazar colores juntos.' : ''}</div></div>
       <h1>${first ? '¿Cómo te llamás?' : 'Nombre del jugador'}</h1>
       <input type="text" id="name" maxlength="30" autocomplete="off" placeholder="${first ? 'Tu nombre' : 'Por ejemplo: Mamá'}">
       <p style="font-size:.9rem;opacity:.9">El nombre y los resultados quedan guardados solo en este aparato.</p>
@@ -230,7 +243,7 @@
       if (!name) return input.focus();
       const p = { id: uid(), name };
       db.players.push(p); db.currentPlayer = p.id; save();
-      first ? home() : parents();
+      first ? petEditor(true) : parents();
     };
     $app.querySelector('#ok').onclick = ok;
     input.onkeydown = e => { if (e.key === 'Enter') ok(); };
@@ -243,7 +256,46 @@
     { m: 3, icon: '🖍️', bg: 'linear-gradient(145deg,#b197fc,#7b3fe4)', title: '¿De qué color es?', sub: 'Decí el color de cada cosa' },
     { m: 4, icon: '❓', bg: 'linear-gradient(145deg,#ffd54f,#f59e0b)', title: 'Cajas sorpresa', sub: 'Una caja tiene crayones cambiados: ¡encontrala!' },
   ];
-  const BUBBLES = ['¿Listo para cazar colores?', '¡Hoy vamos por más esferas!', '¿Qué misión jugamos?', '¡Tu poder no para de crecer!'];
+  const BUBBLES = ['¿Listo para cazar colores?', '¡Hoy vamos por más esferas!', '¿Qué misión jugamos?', '¡Tu poder no para de crecer!', 'Soy {pet}, ¡vamos a cazar colores!'];
+
+  // ---------- Armá a tu compañero ----------
+  function petEditor(first) {
+    setTheme('menu');
+    const draft = curPet();
+    const section = (key, title) => `
+      <h2>${title}</h2>
+      <div class="swatches">${PET_COLORS[key].map(([n, hex]) => `
+        <button class="sw-btn ${draft[key] === hex ? 'sel' : ''}" data-k="${key}" data-c="${hex}"><span class="sw-dot" style="background:${hex}"></span>${n}</button>`).join('')}
+      </div>`;
+    $app.innerHTML = `
+      <h1>${first ? `¡Ahora armá a tu compañero, ${esc(curName())}!` : '¡Armá a tu compañero!'}</h1>
+      <div class="pet-preview">${petSvg(draft)}<span class="pet-name">${esc(draft.name)}</span></div>
+      ${section('skin', '🎨 Piel')}
+      ${section('hair', '💇 Pelo')}
+      ${section('bolt', '⚡ Rayo')}
+      <h2>📛 ¿Cómo se llama?</h2>
+      <input type="text" id="petName" maxlength="14" autocomplete="off" value="${esc(draft.name)}">
+      <div class="row">${PET_NAMES.map(n => `<button class="chip pet-sug" data-n="${n}">${n}</button>`).join('')}</div>
+      <button class="big primary" id="ok" style="background:#1b1b3a;border-color:#ffc83d;margin-top:16px">¡Listo!</button>
+      ${first ? '' : '<button class="link" id="back">Volver</button>'}
+    `;
+    const preview = $app.querySelector('.pet-preview'), nameInput = $app.querySelector('#petName');
+    const refresh = () => { preview.innerHTML = `${petSvg(draft)}<span class="pet-name">${esc(draft.name || '¿?')}</span>`; };
+    $app.querySelectorAll('.sw-btn').forEach(b => b.onclick = () => {
+      draft[b.dataset.k] = b.dataset.c;
+      $app.querySelectorAll(`.sw-btn[data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle('sel', x === b));
+      Sfx.tap(); refresh();
+    });
+    nameInput.oninput = () => { draft.name = nameInput.value.trim(); refresh(); };
+    $app.querySelectorAll('.pet-sug').forEach(b => b.onclick = () => { nameInput.value = draft.name = b.dataset.n; refresh(); });
+    $app.querySelector('#ok').onclick = () => {
+      if (!draft.name) { draft.name = DEFAULT_PET.name; }
+      player(db.currentPlayer).pet = { ...draft };
+      save(); Sfx.level();
+      home();
+    };
+    if (!first) $app.querySelector('#back').onclick = home;
+  }
 
   function home() {
     if (!db.players.length) return newPlayer(true);
@@ -256,12 +308,13 @@
       const n = sessionsOf(cur.id, m).length;
       return n ? `<span class="badge">✓ Completada ${n === 1 ? '1 vez' : n + ' veces'}</span>` : '<span class="badge new">¡Nueva!</span>';
     };
+    const pet = curPet();
     $app.innerHTML = `
       <div class="menu-top">
         <button class="pill-btn" id="sound">${db.sound === false ? '🔇' : '🔊'}</button>
         <button class="pill-btn" id="parents">👨‍👩‍👦 Papás</button>
       </div>
-      <div class="hero">${MASCOT}<div class="bubble"><span class="fun">¡Hola, ${esc(cur.name)}!</span>${BUBBLES[Math.floor(Math.random() * BUBBLES.length)]}</div></div>
+      <div class="hero"><button class="pet-btn" id="pet" aria-label="Cambiar compañero">${petSvg(pet)}<span class="pet-name">${esc(pet.name)} ✏️</span></button><div class="bubble"><span class="fun">¡Hola, ${esc(cur.name)}!</span>${BUBBLES[Math.floor(Math.random() * BUBBLES.length)].replace('{pet}', esc(pet.name))}</div></div>
       <div class="power"><span>PODER</span><b>⚡ ${fmtNum(powerOf(cur.id))}</b></div>
       ${orbsRow(cur.id)}
       ${MISSIONS.map(x => `
@@ -273,6 +326,7 @@
     `;
     $app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { Sfx.tap(); startMission(+b.dataset.m); });
     $app.querySelector('#parents').onclick = parents;
+    $app.querySelector('#pet').onclick = () => petEditor(false);
     $app.querySelector('#sound').onclick = () => { db.sound = db.sound === false; save(); home(); };
   }
 
@@ -657,7 +711,7 @@
         db.players = db.players.filter(p => p !== twin);
         if (db.currentPlayer === twin.id) db.currentPlayer = pl.id;
       }
-      db.players.push({ id: pl.id, name: pl.name });
+      db.players.push({ ...pl });
     }
     const have = new Set(db.sessions.map(s => s.id));
     let added = 0;
