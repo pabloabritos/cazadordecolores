@@ -365,6 +365,7 @@
           <span><span class="msub">Misión ${x.m}</span><span class="mtitle">${x.title}</span><span class="msub">${x.sub}</span>${status(x.m)}</span>
         </button>`).join('')}
       <div class="who">Juega: <b>${esc(cur.name)}</b></div>
+      <div class="credit">Una idea del <b>Tío Pablo</b> 💛</div>
     `;
     $app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { Sfx.tap(); startMission(+b.dataset.m); });
     $app.querySelector('#parents').onclick = parents;
@@ -758,6 +759,7 @@
       <button class="big primary" id="rep">📋 Informe e historial de ${esc(cur.name)}</button>
       <button class="big" id="sim">👓 Así ve ${esc(cur.name)} (simulador)</button>
       <button class="big" id="dev">📲 Cambiar de aparato / copia de seguridad</button>
+      <p class="muted" style="text-align:center;margin-top:24px">Cazador de colores · creado por el <b>Tío Pablo</b> 💛</p>
     `;
     $app.querySelector('#back').onclick = home;
     $app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { db.currentPlayer = b.dataset.p; save(); parents(); });

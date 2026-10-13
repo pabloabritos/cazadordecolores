@@ -83,6 +83,7 @@ body.theme-menu {
 .badge.new { background: #fff1c2; color: #8a5a00; }
 .badge.go { background: #ffe0d1; color: #b33a00; }
 .who { text-align: center; font-size: .9rem; opacity: .9; margin-top: 14px; }
+.credit { text-align: center; font-family: "Baloo 2", sans-serif; font-size: 1rem; margin-top: 6px; opacity: .95; }
 
 /* ---------- Tema juego (gris neutro: no altera la percepción del color) ---------- */
 body.theme-game { background: var(--game-bg); color: var(--game-ink); }
