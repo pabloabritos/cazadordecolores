@@ -49,7 +49,7 @@
   const sessionStars = s => s.stars ?? (s.trials || s.answers || []).length;
   function powerOf(id) {
     let stars = sessionsOf(id).reduce((a, s) => a + sessionStars(s), 0);
-    for (const m of [1, 2, 3]) { const p = (db.progress || {})[id + ':' + m]; if (p) stars += p.stars || 0; }
+    for (const m of [1, 2, 3, 4]) { const p = (db.progress || {})[id + ':' + m]; if (p) stars += p.stars || 0; }
     return stars * 100;
   }
   // Misión 1 da dos esferas (una por nivel); las otras, una.
@@ -241,6 +241,7 @@
     { m: 1, icon: '🔍', bg: 'linear-gradient(145deg,#ffb020,#ff6a00)', title: 'Cazá la figura escondida', sub: 'Encontrá estrellas, anillos, rayos y hongos' },
     { m: 2, icon: '🧠', bg: 'linear-gradient(145deg,#4dabf7,#2d4fd8)', title: 'Memoria de colores', sub: 'Mirá un color… ¡y encontralo!' },
     { m: 3, icon: '🖍️', bg: 'linear-gradient(145deg,#b197fc,#7b3fe4)', title: '¿De qué color es?', sub: 'Decí el color de cada cosa' },
+    { m: 4, icon: '❓', bg: 'linear-gradient(145deg,#ffd54f,#f59e0b)', title: 'Cajas sorpresa', sub: 'Una caja tiene crayones cambiados: ¡encontrala!' },
   ];
   const BUBBLES = ['¿Listo para cazar colores?', '¡Hoy vamos por más esferas!', '¿Qué misión jugamos?', '¡Tu poder no para de crecer!'];
 
@@ -278,7 +279,7 @@
   // La guía para el adulto se muestra una vez cada vez que se abre la app.
   let checklistShown = false;
   function startMission(m) {
-    const run = { 1: mission1, 2: mission2, 3: mission3 }[m];
+    const run = { 1: mission1, 2: mission2, 3: mission3, 4: mission4 }[m];
     if (checklistShown) return run();
     checklistShown = true;
     setTheme('parents');
@@ -518,6 +519,85 @@
     show();
   }
 
+  // ---------- Misión 4: cajas sorpresa ----------
+  // Tres cajas con los mismos crayones; en una, los colores pasaron por el simulador de un tipo de daltonismo.
+  // Para quien tiene ese tipo, esa caja es idéntica a las otras. Cuanto más sutil el cambio que nota, mejor.
+  const QBLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <rect x="4" y="4" width="92" height="92" rx="12" fill="#f7b52c" stroke="#9a5200" stroke-width="6"/>
+    <circle cx="17" cy="17" r="4.5" fill="#9a5200"/><circle cx="83" cy="17" r="4.5" fill="#9a5200"/>
+    <circle cx="17" cy="83" r="4.5" fill="#9a5200"/><circle cx="83" cy="83" r="4.5" fill="#9a5200"/>
+    <text x="53" y="76" text-anchor="middle" font-family="'Baloo 2', sans-serif" font-weight="800" font-size="70" fill="#9a5200">?</text>
+    <text x="50" y="73" text-anchor="middle" font-family="'Baloo 2', sans-serif" font-weight="800" font-size="70" fill="#fff">?</text>
+  </svg>`;
+  const crayon = css => `<svg viewBox="0 0 30 72" aria-hidden="true"><polygon points="15,1 28,20 2,20" fill="${css}"/><rect x="2" y="20" width="26" height="51" rx="2" fill="${css}"/><rect x="2" y="31" width="26" height="5" fill="rgba(0,0,0,.2)"/><rect x="2" y="58" width="26" height="5" fill="rgba(0,0,0,.2)"/></svg>`;
+  const m4Progress = stairs => Core.KINDS.reduce((a, k) => a + (stairs[k].done ? 1 : (stairs[k].level - 1) / Core.M4_LEVELS), 0) / Core.KINDS.length;
+
+  function mission4() {
+    setTheme('game');
+    let st = getProgress(4);
+    if (st) st.easyNext = true; // al volver, arranca con una fácil
+    else st = { stairs: Core.newStairs(Core.KINDS), log: [], stars: 0, sinceEasy: 0, tutorial: 2, easyNext: false };
+    const persist = () => setProgress(4, st);
+
+    function nextTrial() {
+      const seed = Math.floor(Math.random() * 2 ** 31), odd = Math.floor(Math.random() * 3);
+      if (st.tutorial > 0) return { kind: 'control', odd, seed, tutorial: true };
+      const open = Core.KINDS.filter(k => !st.stairs[k].done);
+      if (!open.length) return null;
+      if (st.easyNext || ++st.sinceEasy >= EASY_EVERY) { st.easyNext = false; st.sinceEasy = 0; return { kind: 'control', odd, seed }; }
+      const sim = open[Math.floor(Math.random() * open.length)];
+      return { kind: 'axis', sim, level: st.stairs[sim].level, odd, seed };
+    }
+
+    function show(trial) {
+      if (!trial) return finish();
+      const rand = Core.rng(trial.seed);
+      const poolKind = trial.sim || Core.KINDS[Math.floor(rand() * 3)];
+      const cols = Core.m4Crayons(poolKind, rand);
+      const changed = trial.kind === 'control'
+        ? cols.map(c => c.map(v => v * 0.55))
+        : cols.map(c => Core.applySim(c, trial.sim, Core.m4Intensity(trial.level)).map(Core.clamp01));
+      const box = i => (i === trial.odd ? changed : cols).map(c => crayon(Core.linToCss(c))).join('');
+      $app.innerHTML = `
+        ${gameTop('Cajas', trial.tutorial ? 0 : m4Progress(st.stairs), st.stars)}
+        ${guide(trial.tutorial ? `${esc(curName())}, una de estas cajas tiene crayones un poquito distintos. ¿Cuál es?` : encouragement() + '¿Qué caja es distinta?')}
+        <div class="qboxes">${[0, 1, 2].map(i => `<button class="qcol" data-b="${i}"><span class="qcrayons">${box(i)}</span><span class="qblock">${QBLOCK}</span></button>`).join('')}</div>
+        <button class="qnone" data-b="nada">🙈 Son todas iguales</button>
+      `;
+      $app.querySelector('#quit').onclick = home;
+      $app.querySelectorAll('[data-b]').forEach(b => b.onclick = () => {
+        $app.querySelectorAll('[data-b]').forEach(x => x.onclick = null); // evita doble toque
+        const correct = b.dataset.b === String(trial.odd);
+        st.stars++; cheer();
+        if (trial.tutorial) st.tutorial--;
+        else {
+          st.log.push({ kind: trial.kind, sim: trial.sim || null, level: trial.level || null, answer: b.dataset.b, correct });
+          if (trial.kind === 'axis') {
+            Core.stairUpdate(st.stairs[trial.sim], correct, Core.M4_LEVELS);
+            if (!correct) st.easyNext = true;
+          }
+        }
+        persist();
+        setTimeout(() => show(nextTrial()), 350);
+      });
+    }
+
+    function finish() {
+      const scores = {};
+      for (const k of Core.KINDS) scores[k] = st.stairs[k].score;
+      const ctrl = st.log.filter(t => t.kind === 'control');
+      const before = orbsOf(db.currentPlayer);
+      db.sessions.push({
+        id: uid(), playerId: db.currentPlayer, mission: 4, date: new Date().toISOString(), device: deviceLabel(), stars: st.stars,
+        scores, controls: { ok: ctrl.filter(t => t.correct).length, total: ctrl.length }, trials: st.log,
+      });
+      setProgress(4, null);
+      celebrate(st.stars, before);
+    }
+
+    show(nextTrial());
+  }
+
   function celebrate(stars, orbsBefore) {
     setTheme('menu');
     const id = db.currentPlayer, n = orbsOf(id);
@@ -669,7 +749,7 @@
     M: { title: 'Sensor del verde' },
     S: { title: 'Sensor del azul' },
   };
-  const MISSION_NAME = { 1: 'Figuras escondidas', 2: 'Memoria de colores', 3: 'Nombrar colores' };
+  const MISSION_NAME = { 1: 'Figuras escondidas', 2: 'Memoria de colores', 3: 'Nombrar colores', 4: 'Cajas sorpresa' };
   function scoreText(s) {
     if (s >= 8) return 'Ve bien incluso diferencias muy finas.';
     if (s >= 5) return 'Ve las diferencias medianas; le cuestan las más finas.';
@@ -690,6 +770,26 @@
     }
     for (const s of ss) { out.controlsOk += s.controls.ok; out.controlsTotal += s.controls.total; }
     return out;
+  }
+
+  function m4Summary(id) {
+    const ss = sessionsOf(id, 4);
+    if (!ss.length) return null;
+    const out = { n: ss.length, avg: {}, min: {}, max: {}, controlsOk: 0, controlsTotal: 0 };
+    for (const k of Core.KINDS) {
+      const v = ss.map(s => s.scores[k]);
+      out.avg[k] = avg(v); out.min[k] = Math.min(...v); out.max[k] = Math.max(...v);
+    }
+    for (const s of ss) { out.controlsOk += s.controls.ok; out.controlsTotal += s.controls.total; }
+    return out;
+  }
+  const TYPE_SHORT = { protan: '"rojo" (protán)', deutan: '"verde" (deután)', tritan: 'azul‑amarillo (tritán)' };
+  // Intensidad del primer nivel que ya no distinguió (lo que usa el simulador)
+  const m4Severity = score => score >= Core.M4_LEVELS ? 0.05 : Core.m4Intensity(Math.floor(score) + 1);
+  function m4Text(score) {
+    if (score >= Core.M4_LEVELS) return 'notó incluso los cambios más sutiles';
+    if (score < 1) return 'no notó la diferencia ni con el cambio completo (100%)';
+    return `no notaba la diferencia desde un ${Math.round(m4Severity(score) * 100)}% de intensidad`;
   }
 
   function confusionPairs(id) {
@@ -752,10 +852,16 @@
     const excluded = extra.filter(isRandomish);
     for (const s of extra) if (!excluded.includes(s)) for (const k of errorKinds(s)) if (k in votes) votes[k]++;
     const rgVotes = votes.protan + votes.deutan;
-    const out = { family: null, kind: null, s: null, guessedSubtype: false, basis: [], clearM1: false, excluded: excluded.length };
-    if (sum) {
-      const { L, M, S } = sum.avg, rg = Math.min(L, M);
-      const m1 = `figuras escondidas (sensor del rojo ${L.toFixed(1)}, del verde ${M.toFixed(1)} y del azul ${S.toFixed(1)}, de 10)`;
+    const out = { family: null, kind: null, s: null, guessedSubtype: false, basis: [], clearM1: false, calibrated: false, excluded: excluded.length };
+    const m4 = m4Summary(id);
+    // Si no está la Misión 1, la 4 la reemplaza (llevada a la misma escala de 0 a 10).
+    const toTen = v => v * 10 / Core.M4_LEVELS;
+    const base = sum ? sum.avg : m4 && { L: toTen(m4.avg.protan), M: toTen(m4.avg.deutan), S: toTen(m4.avg.tritan) };
+    if (base) {
+      const { L, M, S } = base, rg = Math.min(L, M);
+      const m1 = sum
+        ? `figuras escondidas (sensor del rojo ${L.toFixed(1)}, del verde ${M.toFixed(1)} y del azul ${S.toFixed(1)}, de 10)`
+        : `cajas sorpresa (tipo rojo ${m4.avg.protan.toFixed(1)}, verde ${m4.avg.deutan.toFixed(1)} y azul ${m4.avg.tritan.toFixed(1)}, de ${Core.M4_LEVELS})`;
       if (rg < 7 && S - rg >= 2) {
         out.family = 'rg'; out.s = sevFromScore(rg); out.basis.push(m1);
         if (M - L >= 2) out.kind = 'protan'; else if (L - M >= 2) out.kind = 'deutan';
@@ -772,17 +878,30 @@
     }
     const typical = out.family === 'tritan' ? votes.tritan : rgVotes;
     if (out.family && typical) out.basis.push(`${typical} confusiones típicas en memoria y nombrar colores`);
+    if (out.family === 'rg' && !out.kind && m4 && sum) {
+      if (m4.avg.deutan - m4.avg.protan >= 2) out.kind = 'protan';
+      else if (m4.avg.protan - m4.avg.deutan >= 2) out.kind = 'deutan';
+      if (out.kind) out.basis.push('cajas sorpresa');
+    }
     if (out.family === 'rg' && !out.kind) {
       if (votes.protan >= 3 && votes.protan >= 2 * votes.deutan) out.kind = 'protan';
       else if (votes.deutan >= 3 && votes.deutan >= 2 * votes.protan) out.kind = 'deutan';
       else { out.kind = 'deutan'; out.guessedSubtype = true; }
     }
+    // La intensidad del simulador la calibra la Misión 4: desde dónde dejó de notar el cambio.
+    if (out.family && m4 && !out.guessedSubtype) { out.s = m4Severity(m4.avg[out.kind]); out.calibrated = true; }
     return out;
   }
 
-  function interpret(sum, conf, nam, lt) {
+  function interpret(sum, conf, nam, lt, m4) {
     const lines = [];
     let redGreen = lt.family === 'rg';
+    if (m4) {
+      const weakest = Core.KINDS.reduce((a, k) => m4.avg[k] < m4.avg[a] ? k : a);
+      if (Core.KINDS.every(k => m4.avg[k] >= 6)) lines.push('En las cajas sorpresa <b>notó incluso cambios de color sutiles</b> de los tres tipos.');
+      else lines.push(`En las cajas sorpresa le costó más notar los cambios del tipo <b>${TYPE_SHORT[weakest]}</b>: ${m4Text(m4.avg[weakest])}.`);
+      if (m4.controlsTotal && m4.controlsOk / m4.controlsTotal < 0.75) lines.push('⚠️ En las cajas sorpresa falló algunas cajas "fáciles": puede que haya estado cansado o distraído.');
+    }
     if (sum) {
       const { L, M, S } = sum.avg;
       const rg = Math.min(L, M);
@@ -852,7 +971,8 @@
     const ref = refId ? mission1Summary(refId) : null;
     const conf = confusionPairs(id);
     const nam = namingErrors(id);
-    const interp = interpret(sum, conf, nam, likelyType(id));
+    const m4 = m4Summary(id);
+    const interp = interpret(sum, conf, nam, likelyType(id), m4);
     const all = sessionsOf(id).slice().sort((a, b) => b.date.localeCompare(a.date));
     const devices = [...new Set(all.map(s => s.device))];
 
@@ -878,6 +998,17 @@
         ${others.length ? `<p class="no-print">Comparar con: <select id="ref">${others.map(o => `<option value="${o.id}" ${o.id === refId ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}<option value="" ${!refId ? 'selected' : ''}>nadie</option></select></p>` : ''}
         ${bars(sum, ref, ref ? player(refId).name : '')}
         ${!ref ? '<p class="muted" style="font-size:.9rem">Para que estos números signifiquen más, conviene que juegue un adulto con visión típica en el mismo aparato y compararlos.</p>' : ''}
+        ` : ''}
+
+        ${m4 ? `
+        <h2>¿Qué cambios de color nota?</h2>
+        <p class="muted">Misión "Cajas sorpresa": tres cajas con los mismos crayones; en una, los colores están "pasados" por el simulador de un tipo de daltonismo, cada vez más sutil. Si tiene ese tipo de daltonismo, esa caja le parece igual a las otras. <b>Más alto = nota cambios más sutiles.</b></p>
+        ${Core.KINDS.map(k => `
+          <div class="bar-row">
+            <div class="bar-label"><span>Cambios del tipo ${TYPE_SHORT[k]}</span><span>${m4.avg[k].toFixed(1)} / ${Core.M4_LEVELS}</span></div>
+            <div class="bar"><span style="width:${m4.avg[k] / Core.M4_LEVELS * 100}%"></span></div>
+            <div class="bar-text">${cap(m4Text(m4.avg[k]))}.${m4.n > 1 ? ` Entre ${m4.min[k]} y ${m4.max[k]} en ${m4.n} partidas.` : ''}</div>
+          </div>`).join('')}
         ` : ''}
 
         ${nam.total ? `
@@ -933,15 +1064,17 @@
             <td>${MISSION_NAME[s.mission]}</td>
             <td>${s.mission === 1
               ? `Rojo ${s.scores.L} · Verde ${s.scores.M} · Azul ${s.scores.S} <span class="muted">(de ${Core.LEVELS})</span>${s.controls.total && s.controls.ok < s.controls.total ? ` <span class="muted">· falló ${s.controls.total - s.controls.ok} lámina(s) fácil(es)</span>` : ''}`
+              : s.mission === 4
+              ? `Tipo rojo ${s.scores.protan} · Tipo verde ${s.scores.deutan} · Tipo azul ${s.scores.tritan} <span class="muted">(de ${Core.M4_LEVELS})</span>${s.controls.total && s.controls.ok < s.controls.total ? ` <span class="muted">· falló ${s.controls.total - s.controls.ok} caja(s) fácil(es)</span>` : ''}`
               : `Acertó ${s.answers.filter(a => a.correct).length} de ${s.answers.length}`}</td>
           </tr>`).join('')}
         </table>
         <p class="muted" style="font-size:.9rem">Si los resultados se parecen entre partidas, son más confiables. Una partida sola puede estar afectada por el cansancio.</p>
         ` : ''}
 
-        ${sum || conf.total || nam.total ? `
+        ${sum || m4 || conf.total || nam.total ? `
         <h2 class="tech">Datos técnicos (para el oftalmólogo)</h2>
-        <p class="tech">${sum ? `Láminas pseudoisocromáticas generadas por modulación de un solo cono (espacio LMS de Viénot et al. 1999, sRGB sin calibrar), con ruido de luminancia por punto (×0.72–1.12). Escalera de 10 niveles logarítmicos por eje. Nivel 1 → nivel 10 en contraste de cono: L ${(Core.MAX_C.L * 100).toFixed(1)}%→${(Core.MIN_C.L * 100).toFixed(1)}%, M ${(Core.MAX_C.M * 100).toFixed(1)}%→${(Core.MIN_C.M * 100).toFixed(1)}%, S ${(Core.MAX_C.S * 100).toFixed(1)}%→${(Core.MIN_C.S * 100).toFixed(1)}%. Puntaje = último nivel superado (2 errores en un nivel terminan el eje; 4 opciones + "no veo"). Láminas de control de luminancia intercaladas: ${sum.controlsOk}/${sum.controlsTotal} correctas. ` : ''}Memoria de colores: recuerdo de color con distractores elegidos por simulación de Machado et al. 2009. Nombrar colores: 10 categorías básicas; distractores = las 2 categorías más confundibles en simulación protán/deután + 1 al azar.</p>
+        <p class="tech">${sum ? `Láminas pseudoisocromáticas generadas por modulación de un solo cono (espacio LMS de Viénot et al. 1999, sRGB sin calibrar), con ruido de luminancia por punto (×0.72–1.12). Escalera de 10 niveles logarítmicos por eje. Nivel 1 → nivel 10 en contraste de cono: L ${(Core.MAX_C.L * 100).toFixed(1)}%→${(Core.MIN_C.L * 100).toFixed(1)}%, M ${(Core.MAX_C.M * 100).toFixed(1)}%→${(Core.MIN_C.M * 100).toFixed(1)}%, S ${(Core.MAX_C.S * 100).toFixed(1)}%→${(Core.MIN_C.S * 100).toFixed(1)}%. Puntaje = último nivel superado (2 errores en un nivel terminan el eje; 4 opciones + "no veo"). Láminas de control de luminancia intercaladas: ${sum.controlsOk}/${sum.controlsTotal} correctas. ` : ''}Memoria de colores: recuerdo de color con distractores elegidos por simulación de Machado et al. 2009. Nombrar colores: 10 categorías básicas; distractores = las 2 categorías más confundibles en simulación protán/deután + 1 al azar. Cajas sorpresa: elección forzada entre 3 (+ "son iguales"); la caja distinta es la simulación de dicromacia de Viénot, Brettel & Mollon 1999 (reemplazo del cono ausente, invisible por construcción para ese dicrómata) mezclada con el original; 8 niveles de intensidad de 100% a 6%, misma regla de escalera, con cajas de control de luminancia.</p>
         ` : ''}
       </div>
     `;
@@ -968,7 +1101,8 @@
     }
     let note = `<b>Preseleccionado según los resultados de ${name}</b>: ${lt.basis.join(' y ')}.`;
     if (lt.guessedSubtype) note += ' No se pudo distinguir entre el tipo "rojo" y el "verde": se muestra el "verde", que es el más común.';
-    if (lt.s == null) note += ' La intensidad es estimada: jugando la misión de figuras escondidas se afina.';
+    if (lt.calibrated) note += ` La intensidad la calibró ${name} en las cajas sorpresa: desde ahí dejó de notar el cambio.`;
+    else if (lt.s == null) note += ' La intensidad es estimada: jugando la misión de figuras escondidas o las cajas sorpresa se afina.';
     return { kind: lt.kind, s: lt.s ?? 0.7, note: note + ' Se puede ajustar.' };
   }
 

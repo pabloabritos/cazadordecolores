@@ -138,16 +138,16 @@ const Core = (() => {
   }
 
   // Escalera: cada acierto sube un nivel; dos errores en el mismo nivel terminan ese eje.
-  function newStairs() {
+  function newStairs(keys = AXES) {
     const s = {};
-    for (const a of AXES) s[a] = { level: 1, fails: 0, trials: 0, done: false, score: null };
+    for (const a of keys) s[a] = { level: 1, fails: 0, trials: 0, done: false, score: null };
     return s;
   }
-  function stairUpdate(st, correct) {
+  function stairUpdate(st, correct, levels = LEVELS) {
     st.trials++;
     if (correct) {
       st.fails = 0;
-      if (st.level >= LEVELS) { st.done = true; st.score = LEVELS; } else st.level++;
+      if (st.level >= levels) { st.done = true; st.score = levels; } else st.level++;
     } else {
       st.fails++;
       if (st.fails >= 2) { st.done = true; st.score = st.level - 1; }
@@ -264,18 +264,55 @@ const Core = (() => {
     return best.d < 15 || best.d / normal < 0.3 ? best.kind : 'otro';
   }
 
-  // ---------- Simulador "así ve" ----------
-  // Mezcla entre visión típica (s = 0) y dicromacia completa (s = 1), en RGB lineal.
+  // ---------- Simulador "así ve" (Viénot, Brettel & Mollon 1999) ----------
+  // Reemplaza la señal del cono que falta por una combinación de los otros dos (plano por el blanco y
+  // el azul, o el rojo para tritán). Los dos conos que sí tiene no cambian, así que para un dicrómata
+  // de ese tipo la imagen simulada es idéntica a la original, a cualquier intensidad.
+  const CONE = { protan: 0, deutan: 1, tritan: 2 };
+  function projection(kind) {
+    const i = CONE[kind], [o0, o1] = [0, 1, 2].filter(x => x !== i);
+    const W = mul(RGB2LMS, [1, 1, 1]), R = mul(RGB2LMS, kind === 'tritan' ? [1, 0, 0] : [0, 0, 1]);
+    const det = W[o0] * R[o1] - W[o1] * R[o0];
+    const a = (W[i] * R[o1] - W[o1] * R[i]) / det, b = (W[o0] * R[i] - W[i] * R[o0]) / det;
+    return { i, o0, o1, a, b };
+  }
+  // Matriz en RGB lineal: mezcla entre visión típica (s = 0) y dicromacia completa (s = 1).
   function simMatrix(kind, s) {
-    const M = MACHADO[kind];
-    return M.map((row, i) => row.map((v, j) => s * v + (1 - s) * (i === j ? 1 : 0)));
+    const { i, o0, o1, a, b } = projection(kind);
+    const P = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    P[i] = [0, 0, 0]; P[i][i] = 1 - s; P[i][o0] = s * a; P[i][o1] = s * b;
+    const mm = (A, B) => A.map(r => B[0].map((_, j) => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+    return mm(LMS2RGB, mm(P, RGB2LMS));
+  }
+  const applySim = (lin, kind, s) => mul(simMatrix(kind, s), lin);
+
+  // ---------- Misión 4: cajas sorpresa ----------
+  const M4_LEVELS = 8;
+  const M4_MIN = 0.06;
+  // Nivel 1 = simulación completa; nivel 8 = un cambio muy sutil.
+  const m4Intensity = level => Math.pow(M4_MIN, (level - 1) / (M4_LEVELS - 1));
+  // Colores que al simularlos siguen dentro de la pantalla y cambian a la vista de alguien típico.
+  const M4_POOL = {};
+  for (const kind of KINDS) {
+    const all = [...NAMING_SWATCHES.map(s => s.lin), ...PALETTE.map(p => p.lin)];
+    M4_POOL[kind] = all.filter(lin => {
+      const t = applySim(lin, kind, 1);
+      return t.every(v => v >= -0.002 && v <= 1.002) && dE(lin, t.map(clamp01)) >= 12;
+    });
+  }
+  function m4Crayons(kind, rand = Math.random) {
+    const pool = M4_POOL[kind].slice();
+    const out = [];
+    while (out.length < 6 && pool.length) out.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+    return out;
   }
 
   return {
     AXES, LEVELS, MAX_C, MIN_C, SHAPE_NAMES, SHAPES, STAR, BOLT, PALETTE, KINDS,
     contrastFor, buildPlate, newStairs, stairUpdate, confusersFor, classifyConfusion, isGoodTarget,
     shiftCone, simulate, dE, dESim, hexToLin, linToCss, rng, toLin, toSrgb,
-    NAMING, NAMING_SWATCHES, namingOptions, classifyNaming, simMatrix,
+    NAMING, NAMING_SWATCHES, namingOptions, classifyNaming, simMatrix, applySim,
+    M4_LEVELS, m4Intensity, m4Crayons, clamp01,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
