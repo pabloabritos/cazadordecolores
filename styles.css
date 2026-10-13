@@ -17,6 +17,7 @@ body {
   color: var(--ink); background: #ececef;
 }
 main {
+  overflow-wrap: break-word; /* que un texto largo (un link) nunca ensanche la pantalla */
   max-width: 760px; margin: 0 auto;
   padding: calc(14px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
 }
@@ -142,6 +143,7 @@ th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line
 ul { padding-left: 1.2em; }
 li { margin: .3em 0; }
 .tech { font-size: .85rem; color: var(--muted); }
+.url { display: block; margin: 6px 0; padding: 8px 10px; background: #f3f3f6; border-radius: 10px; font-weight: 700; word-break: break-all; -webkit-user-select: all; user-select: all; }
 .sim-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 700px) { .sim-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .sim-grid figure { margin: 0; min-width: 0; }

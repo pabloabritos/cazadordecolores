@@ -704,7 +704,9 @@
       <div class="card">
         <h2 style="margin-top:0">2. En el otro aparato: cargar la copia</h2>
         <ul>
-          <li>Abran <b>${esc(url)}</b>. En el iPhone, agréguenlo a la pantalla de inicio y ábranlo <b>desde el ícono</b>.</li>
+          <li>Abran este link. En el iPhone, agréguenlo a la pantalla de inicio y ábranlo <b>desde el ícono</b>.
+            <span class="url">${esc(url)}</span>
+            <button id="copyUrl">📋 Copiar link</button></li>
           <li>Si es la primera vez, en la bienvenida toquen <b>"¿Ya jugaba en otro aparato? Cargar una copia"</b>. Si ya lo venían usando, entren a esta misma pantalla y toquen <b>Cargar copia</b>.</li>
           <li><b>En el iPhone</b> el archivo tiene que estar en la app Archivos: si llegó por WhatsApp o Mail, ábranlo, toquen <b>Compartir → Guardar en Archivos</b> y después elíjanlo desde acá.</li>
         </ul>
@@ -725,6 +727,10 @@
     `;
     $app.querySelector('#back').onclick = parents;
     $app.querySelector('#export').onclick = exportBackup;
+    $app.querySelector('#copyUrl').onclick = async e => {
+      try { await navigator.clipboard.writeText(url); e.target.textContent = '✅ Link copiado'; }
+      catch (err) { e.target.textContent = 'Mantené apretado el link para copiarlo'; }
+    };
     const file = $app.querySelector('#import'), msg = $app.querySelector('#importMsg');
     $app.querySelector('#importBtn').onclick = () => file.click();
     file.onchange = async () => {
