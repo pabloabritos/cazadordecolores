@@ -230,14 +230,16 @@
   }
 
   // Barra de avance: una estrella que camina hasta la meta. No dice si acertó o no.
-  const progressBar = (label, frac) => {
+  // Arriba solo el avance: el nivel y las estrellas, y la barra de 0 a la meta.
+  const gameTop = (label, frac, stars) => {
     const pct = Math.round(Math.min(1, Math.max(0, frac)) * 100);
-    return `<div class="progress"><span class="plabel">${label}</span>
-      <div class="ptrack"><div class="pfill" style="width:${pct}%"></div><span class="prunner" style="left:${pct}%">⭐</span></div>
-      <span class="pgoal">🏁</span></div>`;
+    return `<div class="gtop"><span class="plabel">${label}</span><span class="stars">⭐ ${stars}</span></div>
+      <div class="progress"><span class="pzero">0</span>
+        <div class="ptrack"><div class="pfill" style="width:${pct}%"></div><span class="prunner" style="left:${pct}%">⭐</span></div>
+        <span class="pgoal">🏁</span></div>`;
   };
-  const gameTop = (label, frac, stars) => `
-    <div class="gtop"><button class="quit" id="quit">✕</button>${progressBar(label, frac)}<span class="stars">⭐ ${stars}</span></div>`;
+  // Abajo de todo y separado de las respuestas, para no tocarlo sin querer.
+  const BACK_BTN = '<button class="back-btn" id="quit">← Volver</button>';
   const guide = html => `<div class="guide">${petSvg()}<div class="bubble">${html}</div></div>`;
 
   // ---------- Inicio ----------
@@ -456,6 +458,7 @@
           ${Core.SHAPE_NAMES.map(s => `<button data-a="${s}">${ICONS[s]}<span>${SHAPE_LABEL[s]}</span></button>`).join('')}
           <button class="none" data-a="nada">🙈 No veo nada</button>
         </div>
+        ${BACK_BTN}
       `;
       drawPlate($app.querySelector('canvas'), trial);
       $app.querySelector('#quit').onclick = home;
@@ -537,6 +540,7 @@
         <div class="opts" style="visibility:hidden">
           ${opts.map(i => `<button data-i="${i}" style="background:${Core.PALETTE[i].hex}" aria-label="opción"></button>`).join('')}
         </div>
+        ${BACK_BTN}
       `;
       $app.querySelector('#quit').onclick = home;
       setTimeout(() => {
@@ -589,6 +593,7 @@
         <div class="object"><svg viewBox="0 0 200 200">${o.svg(sw.hex)}</svg></div>
         <div class="names">${opts.map(c => `<button data-c="${c}">${Core.NAMING[c].name}</button>`).join('')}</div>
         <button class="speak" id="speak">🔊 Escuchar</button>
+        ${BACK_BTN}
       `;
       $app.querySelector('#quit').onclick = home;
       $app.querySelector('#speak').onclick = () => speak(question + ' ' + opts.map(c => Core.NAMING[c].name).join(', ') + '.');
@@ -656,6 +661,7 @@
         ${guide(trial.tutorial ? `${esc(curName())}, una de estas cajas tiene crayones un poquito distintos. ¿Cuál es?` : encouragement() + '¿Qué caja es distinta?')}
         <div class="qboxes">${[0, 1, 2].map(i => `<button class="qcol" data-b="${i}"><span class="qcrayons">${box(i)}</span><span class="qblock">${QBLOCK}</span></button>`).join('')}</div>
         <button class="qnone" data-b="nada">🙈 Son todas iguales</button>
+        ${BACK_BTN}
       `;
       $app.querySelector('#quit').onclick = home;
       $app.querySelectorAll('[data-b]').forEach(b => b.onclick = () => {
