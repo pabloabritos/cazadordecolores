@@ -800,7 +800,7 @@
         <ul>
           <li><b>Una o dos misiones por día</b>, no todas juntas. Cansado responde peor.</li>
           <li>Orden sugerido: el primer día la <b>Misión 1</b> y la <b>Misión 4</b> (las que más información dan); otro día la <b>2</b> y la <b>3</b>.</li>
-          <li>Que esté <b>descansado</b>, sin hambre ni sueño, y sin la tele o hermanos alrededor.</li>
+          <li>Que esté <b>descansado</b>, sin hambre ni sueño, y sin la tele o Roma alrededor.</li>
           <li>Si se cansa o se distrae, toquen <b>"← Volver"</b>: la misión queda guardada y sigue otro día.</li>
           <li>Vale la pena repetir cada misión <b>2 o 3 veces en días distintos</b>: si los resultados se parecen, son más confiables.</li>
         </ul>
@@ -817,7 +817,7 @@
         <h2 style="margin-top:0">👥 Quién juega</h2>
         <ul>
           <li>El <b>primer jugador</b> que se anota tiene que ser ${kid}: la app lo toma como el jugador principal.</li>
-          <li>Si quieren jugar ustedes o los hermanos, agreguen un jugador en <b>"Mamá y papá"</b>. Sus resultados sirven para comparar con los de ${kid}.</li>
+          <li>Si quieren jugar ustedes o Roma, agreguen un jugador en <b>"Mamá y papá"</b>. Sus resultados sirven para comparar con los de ${kid}.</li>
           <li>Los demás <b>juegan sin que ${kid} los vea</b>: si los ve encontrar al instante cosas que él no ve, puede frustrarse o sentir que "le va mal".</li>
         </ul>
       </div>
