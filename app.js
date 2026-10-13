@@ -250,6 +250,7 @@
       <h1>${first ? '¿Cómo te llamás?' : 'Nombre del jugador'}</h1>
       <input type="text" id="name" maxlength="30" autocomplete="off" placeholder="${first ? 'Tu nombre' : 'Por ejemplo: Mamá'}">
       <p style="font-size:.9rem;opacity:.9">El nombre y los resultados quedan guardados solo en este aparato.</p>
+      ${first ? '' : `<p class="bubble" style="font-weight:500">${refNote()}</p>`}
       <button class="big primary" id="ok" style="background:#1b1b3a;border-color:#ffc83d">¡Listo!</button>
       ${first ? `<button class="link" id="restore">¿Ya jugaba en otro aparato? Cargar una copia</button>
         <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
@@ -372,9 +373,32 @@
   }
 
   // La guía para el adulto se muestra una vez cada vez que se abre la app.
+  // El primer jugador es el chico; los demás son adultos que juegan para comparar.
+  const kidName = () => esc((db.players[0] || {}).name || 'el chico');
+  const isReference = () => db.players.length > 1 && db.currentPlayer !== db.players[0].id;
+  const refNote = () => `<b>Importante: jueguen sin que ${kidName()} los vea.</b> Si los ve encontrar al instante figuras o diferencias que él no ve, puede frustrarse o sentir que "le va mal". Lo ideal es jugar cuando no está o está ocupado en otra cosa.`;
+
   let checklistShown = false;
+  const refReminded = new Set();
   function startMission(m) {
     const run = { 1: mission1, 2: mission2, 3: mission3, 4: mission4 }[m];
+    if (isReference() && !refReminded.has(db.currentPlayer)) {
+      refReminded.add(db.currentPlayer);
+      setTheme('parents');
+      $app.innerHTML = `
+        <h1>👀 Antes de jugar como ${esc(curName())}</h1>
+        <div class="card">
+          <p style="margin-top:0">Estás jugando como <b>${esc(curName())}</b>, para que el informe tenga una referencia de visión típica.</p>
+          <p>${refNote()}</p>
+          <p class="muted">Usen el mismo aparato y las mismas condiciones que cuando juega ${kidName()} (brillo alto, Night Shift y True Tone apagados).</p>
+        </div>
+        <button class="big primary" id="go">Entendido, jugar</button>
+        <button class="link" id="back">Volver</button>
+      `;
+      $app.querySelector('#go').onclick = run;
+      $app.querySelector('#back').onclick = home;
+      return;
+    }
     if (checklistShown) return run();
     checklistShown = true;
     setTheme('parents');
@@ -729,7 +753,7 @@
           ${db.players.map(p => `<button class="chip ${p.id === db.currentPlayer ? 'sel' : ''}" data-p="${p.id}">${esc(p.name)}</button>`).join('')}
           <button class="chip" id="add">+ Agregar</button>
         </div>
-        <p class="muted" style="font-size:.9rem">Tip: que también juegue un adulto con visión típica, en este mismo aparato. Así el informe tiene con qué comparar.</p>
+        <p class="muted" style="font-size:.9rem">Tip: que también juegue un adulto con visión típica, en este mismo aparato. Así el informe tiene con qué comparar. ${db.players.length ? refNote() : ''}</p>
       </div>
       <button class="big primary" id="rep">📋 Informe e historial de ${esc(cur.name)}</button>
       <button class="big" id="sim">👓 Así ve ${esc(cur.name)} (simulador)</button>
@@ -1102,7 +1126,7 @@
         <p class="muted">Misión "Cazá la figura escondida": hay que encontrar una figura escondida entre puntitos. Cada lámina pone a prueba un solo sensor, y la diferencia se achica nivel a nivel. <b>Más alto = ve diferencias más finas.</b></p>
         ${others.length ? `<p class="no-print">Comparar con: <select id="ref">${others.map(o => `<option value="${o.id}" ${o.id === refId ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}<option value="" ${!refId ? 'selected' : ''}>nadie</option></select></p>` : ''}
         ${bars(sum, ref, ref ? player(refId).name : '')}
-        ${!ref ? '<p class="muted" style="font-size:.9rem">Para que estos números signifiquen más, conviene que juegue un adulto con visión típica en el mismo aparato y compararlos.</p>' : ''}
+        ${!ref ? `<p class="muted" style="font-size:.9rem">Para que estos números signifiquen más, conviene que juegue un adulto con visión típica en el mismo aparato y compararlos, <b>sin que ${kidName()} lo vea jugar</b>.</p>` : ''}
         ` : ''}
 
         ${m4 ? `
