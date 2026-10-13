@@ -65,7 +65,6 @@
   @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
   /* Informe */
-  .notice { background: #fff6dc; border: 1px solid #ecd28a; border-radius: 12px; padding: 12px 14px; }
   .bar-row { margin: 14px 0; }
   .bar-label { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
   .bar { height: 18px; background: #e4e4ea; border-radius: 9px; position: relative; overflow: hidden; margin-top: 4px; }
@@ -693,10 +692,6 @@ if (typeof module !== 'undefined') module.exports = Core;
       <div class="card">
         <h1>Informe de colores: ${esc(p.name)}</h1>
         <p class="muted">Generado el ${fmtDate(new Date().toISOString())} · ${all.length} partida${all.length === 1 ? '' : 's'}${devices.length ? ' · Aparato: ' + devices.map(esc).join(', ') : ''}</p>
-        <div class="notice">
-          <b>Importante:</b> este informe sale de un juego hecho en casa, en una pantalla común. Sirve para <b>orientar y conversar</b>, no es un diagnóstico.
-          El tipo y el grado de daltonismo los confirma un <b>oftalmólogo</b>.
-        </div>
 
         <h2>En pocas palabras</h2>
         ${interp.html}
@@ -774,6 +769,9 @@ if (typeof module !== 'undefined') module.exports = Core;
           <button id="export">Descargar copia</button>
           <label class="row"><button id="importBtn">Cargar copia</button><input type="file" id="import" accept="application/json" hidden></label>
         </div>
+        <h2>Empezar de cero</h2>
+        <p class="muted">Borra todos los jugadores y resultados guardados en este aparato.</p>
+        <button id="reset">Borrar todos los datos</button>
       </div>
     `;
     $app.querySelector('#back').onclick = home;
@@ -790,6 +788,12 @@ if (typeof module !== 'undefined') module.exports = Core;
     };
     const file = $app.querySelector('#import');
     $app.querySelector('#importBtn').onclick = () => file.click();
+    $app.querySelector('#reset').onclick = () => {
+      if (!confirm('¿Borrar todos los jugadores y resultados de este aparato? No se puede deshacer.')) return;
+      db = { players: [], sessions: [], currentPlayer: null };
+      save();
+      home();
+    };
     file.onchange = async () => {
       try {
         const data = JSON.parse(await file.files[0].text());
