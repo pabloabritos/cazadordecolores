@@ -980,6 +980,17 @@
     for (const s of ss) { out.controlsOk += s.controls.ok; out.controlsTotal += s.controls.total; }
     return out;
   }
+  // La Misión 4 no se usa si falló muchas cajas fáciles o si contradice a la Misión 1: no notar un cambio
+  // en un sensor que en las figuras escondidas anduvo bien es cansancio o consigna no entendida.
+  const M4_FOR_AXIS = { protan: 'L', deutan: 'M', tritan: 'S' };
+  function m4Unreliable(m4, sum) {
+    if (!m4) return null;
+    if (m4.controlsTotal && m4.controlsOk / m4.controlsTotal < 0.75) return 'falló varias cajas "fáciles"';
+    if (sum && Core.KINDS.some(k => sum.avg[M4_FOR_AXIS[k]] >= 7 && m4.avg[k] * 10 / Core.M4_LEVELS < 4)) {
+      return 'los resultados no coinciden con los de las figuras escondidas';
+    }
+    return null;
+  }
   const TYPE_SHORT = { protan: '"rojo" (protán)', deutan: '"verde" (deután)', tritan: 'azul‑amarillo (tritán)' };
   // Intensidad del primer nivel que ya no distinguió (lo que usa el simulador)
   const m4Severity = score => score >= Core.M4_LEVELS ? 0.05 : Core.m4Intensity(Math.floor(score) + 1);
@@ -1030,15 +1041,24 @@
   // Tipo probable combinando las tres misiones. Lo usan el informe y el simulador, así nunca se contradicen.
   // Manda la Misión 1 (mide cada sensor por separado); las Misiones 2 y 3 desempatan, o suplen si falta la 1.
   // Tipo de cada error de las Misiones 2 y 3: protán, deután, tritán u 'otro' (no típico de ningún daltonismo).
-  const errorKinds = s => s.answers.filter(a => !a.correct)
-    .map(a => s.mission === 2 ? Core.classifyConfusion(a.target, a.chosen) : Core.classifyNaming(a.si, a.chosen));
+  // Un error 'otro' entre colores vecinos (que se parecen también para la vista típica, como naranja y
+  // salmón) es más una confusión de chico que una respuesta al azar: queda como 'cercano'.
+  const NEAR_DE = 40;
+  const normalDE = (s, a) => s.mission === 2
+    ? Core.dE(Core.PALETTE[a.target].lin, Core.PALETTE[a.chosen].lin)
+    : Math.min(...Core.NAMING[a.chosen].shades.map(sh => Core.dE(Core.NAMING_SWATCHES[a.si].lin, sh.lin)));
+  const errorKinds = s => s.answers.filter(a => !a.correct).map(a => {
+    const k = s.mission === 2 ? Core.classifyConfusion(a.target, a.chosen) : Core.classifyNaming(a.si, a.chosen);
+    return k === 'otro' && normalDE(s, a) < NEAR_DE ? 'cercano' : k;
+  });
   // Las opciones incorrectas son a propósito confusiones típicas, así que alguien que responde al azar
   // parece daltónico. Lo que lo delata es la incoherencia: un daltónico se equivoca dentro de una sola
   // familia (rojo‑verde o azul‑amarillo); al azar se mezclan familias y aparecen errores "otro".
   function isRandomish(s) {
     const k = errorKinds(s);
     const rg = k.filter(isRG).length, tri = k.filter(x => x === 'tritan').length;
-    const inconsistent = k.length - Math.max(rg, tri);
+    // Un error 'cercano' cuenta medio: si no contara nada, se escaparían muchas partidas al azar.
+    const inconsistent = k.length - Math.max(rg, tri) - 0.5 * k.filter(x => x === 'cercano').length;
     return inconsistent >= 2 && inconsistent / k.length >= 0.25;
   }
 
@@ -1050,7 +1070,7 @@
     for (const s of extra) if (!excluded.includes(s)) for (const k of errorKinds(s)) if (k in votes) votes[k]++;
     const rgVotes = votes.protan + votes.deutan;
     const out = { family: null, kind: null, s: null, guessedSubtype: false, basis: [], clearM1: false, calibrated: false, excluded: excluded.length };
-    const m4 = m4Summary(id);
+    const m4raw = m4Summary(id), m4 = m4Unreliable(m4raw, sum) ? null : m4raw;
     // Si no está la Misión 1, la 4 la reemplaza (llevada a la misma escala de 0 a 10).
     const toTen = v => v * 10 / Core.M4_LEVELS;
     const base = sum ? sum.avg : m4 && { L: toTen(m4.avg.protan), M: toTen(m4.avg.deutan), S: toTen(m4.avg.tritan) };
@@ -1093,12 +1113,6 @@
   function interpret(sum, conf, nam, lt, m4) {
     const lines = [];
     let redGreen = lt.family === 'rg';
-    if (m4) {
-      const weakest = Core.KINDS.reduce((a, k) => m4.avg[k] < m4.avg[a] ? k : a);
-      if (Core.KINDS.every(k => m4.avg[k] >= 6)) lines.push('En las cajas sorpresa <b>notó incluso cambios de color sutiles</b> de los tres tipos.');
-      else lines.push(`En las cajas sorpresa le costó más notar los cambios del tipo <b>${TYPE_SHORT[weakest]}</b>: ${m4Text(m4.avg[weakest])}.`);
-      if (m4.controlsTotal && m4.controlsOk / m4.controlsTotal < 0.75) lines.push('⚠️ En las cajas sorpresa falló algunas cajas "fáciles": puede que haya estado cansado o distraído.');
-    }
     if (sum) {
       const { L, M, S } = sum.avg;
       const rg = Math.min(L, M);
@@ -1115,6 +1129,15 @@
       }
       if (sum.controlsTotal && sum.controlsOk / sum.controlsTotal < 0.75) {
         lines.push('⚠️ Falló algunas láminas "fáciles" que ve cualquier persona: puede que haya estado cansado o distraído. Tomar este resultado con cuidado.');
+      }
+    }
+    if (m4) {
+      const bad = m4Unreliable(m4, sum);
+      if (bad) lines.push(`⚠️ Las cajas sorpresa <b>no se tuvieron en cuenta</b>: ${bad}. Puede que haya estado cansado o que no haya entendido la consigna. Conviene repetirla otro día, como primera misión y descansado.`);
+      else {
+        const weakest = Core.KINDS.reduce((a, k) => m4.avg[k] < m4.avg[a] ? k : a);
+        if (Core.KINDS.every(k => m4.avg[k] >= 6)) lines.push('En las cajas sorpresa <b>notó incluso cambios de color sutiles</b> de los tres tipos.');
+        else lines.push(`En las cajas sorpresa le costó más notar los cambios del tipo <b>${TYPE_SHORT[weakest]}</b>: ${m4Text(m4.avg[weakest])}.`);
       }
     }
     if (conf.total) {
@@ -1200,6 +1223,7 @@
         ${m4 ? `
         <h2>¿Qué cambios de color nota?</h2>
         <p class="muted">Misión "Cajas sorpresa": tres cajas con los mismos crayones; en una, los colores están "pasados" por el simulador de un tipo de daltonismo, cada vez más sutil. Si tiene ese tipo de daltonismo, esa caja le parece igual a las otras. <b>Más alto = nota cambios más sutiles.</b></p>
+        ${m4Unreliable(m4, sum) ? `<p>⚠️ <b>Estos resultados no se tuvieron en cuenta</b>: ${m4Unreliable(m4, sum)}. Conviene repetir la misión otro día.</p>` : ''}
         ${Core.KINDS.map(k => `
           <div class="bar-row">
             <div class="bar-label"><span>Cambios del tipo ${TYPE_SHORT[k]}</span><span>${m4.avg[k].toFixed(1)} / ${Core.M4_LEVELS}</span></div>
